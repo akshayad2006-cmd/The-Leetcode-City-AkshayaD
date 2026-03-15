@@ -10,10 +10,12 @@ import {
   ITEM_NAMES,
   ITEM_EMOJIS,
   FACES_ITEMS,
-  ACHIEVEMENT_ITEMS,
   RAID_VEHICLE_ITEMS,
   RAID_TAG_ITEMS,
   RAID_BOOST_ITEMS,
+  RAID_CONSUMABLE_ITEMS,
+  ITEM_UNLOCK_LEVELS,
+  ACHIEVEMENT_ITEMS,
 } from "@/lib/zones";
 import {
   trackShopPageView,
@@ -93,6 +95,10 @@ interface Props {
   totalPurchaseCounts?: Record<string, number>;
   initialPoints?: number;
   initialBuildingStyle?: string;
+  consumablesInventory?: { item_id: string; quantity: number; weekly_uses: number; last_reset_week: string }[];
+  xpLevel?: number;
+  acceptedMedium?: number;
+  acceptedHard?: number;
 }
 
 interface PixModalData {
@@ -636,6 +642,10 @@ export default function ShopClient({
   totalPurchaseCounts = {},
   initialPoints = 0,
   initialBuildingStyle = "tower",
+  consumablesInventory = [],
+  xpLevel = 1,
+  acceptedMedium = 0,
+  acceptedHard = 0,
 }: Props) {
   // Loadout state
   const [loadout, setLoadout] = useState<Loadout>(
@@ -664,8 +674,9 @@ export default function ShopClient({
   const [confirmBuyItem, setConfirmBuyItem] = useState<string | null>(null);
   const [verifyingStar, setVerifyingStar] = useState(false);
   const [starVerifyStep, setStarVerifyStep] = useState<"idle" | "opened" | "verifying">("idle");
-  const [activeTab, setActiveTab] = useState<"building" | "raid" | "points">(() => {
+  const [activeTab, setActiveTab] = useState<"building" | "raid" | "consumables" | "points">(() => {
     if (purchasedItem && [...RAID_VEHICLE_ITEMS, ...RAID_TAG_ITEMS, ...RAID_BOOST_ITEMS].includes(purchasedItem)) return "raid";
+    if (purchasedItem && RAID_CONSUMABLE_ITEMS.includes(purchasedItem)) return "consumables";
     return "building";
   });
 
@@ -1316,6 +1327,16 @@ export default function ShopClient({
           BATTLE
         </button>
         <button
+          onClick={() => setActiveTab("consumables")}
+          className={`px-5 py-2 text-[11px] border-[2px] transition-colors ${activeTab === "consumables"
+            ? "bg-bg-card border-cream/20"
+            : "border-border text-muted hover:text-cream hover:border-border-light"
+            }`}
+          style={{ color: activeTab === "consumables" ? "#ffaa00" : undefined }}
+        >
+          CONSUMABLES
+        </button>
+        <button
           onClick={() => setActiveTab("points")}
           className={`px-5 py-2 text-[11px] border-[2px] transition-colors ${activeTab === "points"
             ? "bg-bg-card border-cream/20"
@@ -1417,6 +1438,9 @@ export default function ShopClient({
 
                         const isLeetCodeStar = itemId === "github_star";
 
+                        const reqLevel = ITEM_UNLOCK_LEVELS[itemId];
+                        const isLevelLocked = reqLevel && xpLevel < reqLevel;
+
                         // Badge text
                         let badge: string;
                         let badgeColor: string;
@@ -1429,6 +1453,13 @@ export default function ShopClient({
                         } else if (isLeetCodeStar) {
                           badge = "\u2B50 STAR TO UNLOCK";
                           badgeColor = "#FFD700";
+                        } else if (itemId === "scouting_satellite" && !isOwned) {
+                          const met = acceptedMedium >= 10 || acceptedHard >= 5;
+                          badge = met ? "Unlockable!" : "LC QUEST LCKD";
+                          badgeColor = met ? "#39d353" : "#f0a030";
+                        } else if (isLevelLocked && !isOwned) {
+                          badge = `LVL ${reqLevel} REQ`;
+                          badgeColor = "#f0a030";
                         } else if (isFreeItem) {
                           badge = "FREE";
                           badgeColor = ACCENT;
@@ -1463,6 +1494,10 @@ export default function ShopClient({
                           } else if (isFreeItem) {
                             claimFreeItem();
                           } else if (shopItem && shopItem.price_usd_cents > 0) {
+                            // Don't allow buying if level locked or quest locked
+                            if (isLevelLocked && !isOwned) return;
+                            if (itemId === "scouting_satellite" && !isOwned && !(acceptedMedium >= 10 || acceptedHard >= 5)) return;
+
                             if (!isConfirming) trackShopItemViewed(itemId, zone, shopItem.price_usd_cents);
                             setConfirmBuyItem(isConfirming ? null : itemId);
                           }
@@ -2167,8 +2202,98 @@ export default function ShopClient({
               );
             })()}
           </div>
+          <p className="text-center text-[10px] text-dim normal-case">
+            Payment via Stripe
+          </p>
+        </div>
+      )}
 
-          {/* Payment note */}
+      {/* ─── Consumables Tab ─── */}
+      {activeTab === "consumables" && (
+        <div className="max-w-[640px] mx-auto space-y-5">
+          <div className="border-[3px] border-border bg-bg-raised p-4">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm" style={{ color: "#ffaa00" }}>
+                Consumables
+              </h3>
+              <span className="text-[9px] text-muted normal-case">
+                Single-use combat items
+              </span>
+            </div>
+
+            <p className="mb-1.5 text-[9px] uppercase tracking-wider text-muted">Defenses & Offenses</p>
+            <div className="grid grid-cols-2 gap-3 mb-0">
+              {RAID_CONSUMABLE_ITEMS.map((itemId) => {
+                const shopItem = getShopItem(itemId);
+                const isBuying = buyingItem === itemId;
+                const isConfirming = confirmBuyItem === itemId;
+                
+                // Get inventory counts
+                const inventory = consumablesInventory.find(c => c.item_id === itemId);
+                const qty = inventory?.quantity ?? 0;
+                let weeklyUses = inventory?.weekly_uses ?? 0;
+                
+                // Check if week reset
+                if (inventory?.last_reset_week) {
+                  const now = new Date();
+                  const currentWeekStr = new Date(now.setDate(now.getDate() - now.getDay() + (now.getDay() === 0 ? -6 : 1))).toISOString().split('T')[0];
+                  if (new Date(inventory.last_reset_week).toISOString().split('T')[0] !== currentWeekStr) {
+                    weeklyUses = 0;
+                  }
+                }
+
+                return (
+                  <div key={itemId} className="relative" data-buy-popover>
+                    <button
+                      onClick={() => {
+                        if (shopItem && shopItem.price_usd_cents > 0) {
+                          if (!isConfirming) trackShopItemViewed(itemId, "consumables", shopItem.price_usd_cents);
+                          setConfirmBuyItem(isConfirming ? null : itemId);
+                        }
+                      }}
+                      disabled={isBuying}
+                      className={[
+                        "w-full overflow-hidden transition-colors border-[2px]",
+                        isConfirming ? "border-red-500/60" : "border-border hover:border-[#ffaa00]/40",
+                        "bg-bg-card p-3 flex flex-col items-center",
+                      ].join(" ")}
+                    >
+                      <span className="text-3xl mb-2">{ITEM_EMOJIS[itemId] ?? "?"}</span>
+                      <span className="text-[10px] text-cream mb-1 text-center font-bold">
+                        {ITEM_NAMES[itemId] ?? itemId}
+                      </span>
+                      <span className="mt-0.5 text-[8px] text-muted">
+                        Owned: {qty} | Used: {weeklyUses}/3
+                      </span>
+                      <span className="mt-2 text-[10px]" style={{ color: ACCENT }}>
+                        {isBuying ? "..." : shopItem ? formatPrice(shopItem) : ""}
+                      </span>
+                    </button>
+                    {isConfirming && shopItem && (
+                      <div className="absolute left-1/2 -translate-x-1/2 top-full mt-1 z-30 w-36 border-[2px] border-border bg-bg p-2 shadow-lg">
+                        <p className="text-[9px] text-cream text-center mb-1.5">{ITEM_NAMES[itemId]}</p>
+                        <p className="text-[10px] text-center mb-2" style={{ color: "#ff5555" }}>{formatPrice(shopItem)}</p>
+                        <div className="flex flex-col gap-1">
+                          <div className="flex gap-1">
+                            <button onClick={(e) => { e.stopPropagation(); setConfirmBuyItem(null); }} className="flex-1 border-[2px] border-border py-1 text-[9px] text-muted hover:text-cream">Cancel</button>
+                            <button onClick={(e) => { e.stopPropagation(); setConfirmBuyItem(null); checkout(itemId); }} disabled={isBuying} className="btn-press flex-1 py-1 text-[9px] text-bg disabled:opacity-40" style={{ backgroundColor: "#ffaa00", boxShadow: "1px 1px 0 0 #b37700" }}>{isBuying ? "..." : "Buy"}</button>
+                          </div>
+                          <button onClick={(e) => { e.stopPropagation(); setConfirmBuyItem(null); checkout(itemId, "nowpayments"); }} disabled={isBuying} className="btn-press w-full py-1 text-[9px] text-bg disabled:opacity-40" style={{ backgroundColor: "#f7931a", boxShadow: "1px 1px 0 0 #b36a00" }}>{isBuying ? "..." : "Pay with Crypto"}</button>
+                          {isBrazil && <button onClick={(e) => { e.stopPropagation(); setConfirmBuyItem(null); checkout(itemId, "abacatepay"); }} disabled={isBuying} className="btn-press w-full py-1 text-[9px] text-bg disabled:opacity-40" style={{ backgroundColor: "#32bcad", boxShadow: "1px 1px 0 0 #1a7a6e" }}>{isBuying ? "..." : "Pay with PIX"}</button>}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+            
+            <div className="mt-4 p-4 border-[2px] border-dashed border-[#ffaa00]/30 bg-[#ffaa00]/5 text-center">
+              <p className="text-[10px] text-muted normal-case italic">
+                Each offensive or defensive item has a strict global limit: 3 uses per player, per week. Defenses automatically equip while you're offline to block incoming Raids unless EMP'd. Use sabotage viruses and EMP devices wisely before executing a raid!
+              </p>
+            </div>
+          </div>
           <p className="text-center text-[10px] text-dim normal-case">
             Payment via Stripe
           </p>

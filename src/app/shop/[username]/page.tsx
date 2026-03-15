@@ -100,7 +100,7 @@ export default async function ShopPage({ params, searchParams }: Props) {
 
   const sb = getSupabaseAdmin();
 
-  const [items, ownedItems, customizationsResult, billboardPurchasesResult, topDevResult, topStarsResult, achievementsResult, loadoutResult, raidLoadoutResult, allPurchasesResult] = await Promise.all([
+  const [items, ownedItems, customizationsResult, billboardPurchasesResult, topDevResult, topStarsResult, achievementsResult, loadoutResult, raidLoadoutResult, allPurchasesResult, consumablesResult] = await Promise.all([
     getActiveItems(),
     getOwnedItems(dev.id),
     sb
@@ -147,6 +147,10 @@ export default async function ShopPage({ params, searchParams }: Props) {
       .from("purchases")
       .select("item_id, created_at")
       .eq("status", "completed"),
+    sb
+      .from("developer_consumables")
+      .select("item_id, quantity, weekly_uses, last_reset_week")
+      .eq("developer_id", dev.id)
   ]);
 
   const achievements = (achievementsResult.data ?? []).map((a: { achievement_id: string }) => a.achievement_id);
@@ -257,6 +261,10 @@ export default async function ShopPage({ params, searchParams }: Props) {
           purchaseCounts={weeklyPurchaseCounts}
           totalPurchaseCounts={purchaseCounts}
           initialPoints={dev.points ?? 0}
+          xpLevel={dev.xp_level ?? 1}
+          acceptedMedium={dev.accepted_medium ?? 0}
+          acceptedHard={dev.accepted_hard ?? 0}
+          consumablesInventory={consumablesResult?.data ?? []}
         />
 
         {/* Back links */}

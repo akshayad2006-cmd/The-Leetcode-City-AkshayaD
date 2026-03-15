@@ -34,11 +34,15 @@ export async function POST(request: Request) {
   }
 
   const body = await request.json();
-  const { target_login, boost_purchase_id, vehicle_id } = body as {
+  const { target_login, boost_purchase_id, consumable_item_id: _legacy_consumable, offensive_item_id, vehicle_id } = body as {
     target_login: string;
     boost_purchase_id?: number;
+    consumable_item_id?: string;
+    offensive_item_id?: string;
     vehicle_id?: string;
   };
+  // Support both the old `consumable_item_id` key and the new `offensive_item_id` key
+  const consumable_item_id = offensive_item_id ?? _legacy_consumable;
 
   if (!target_login || typeof target_login !== "string") {
     return NextResponse.json({ error: "Missing target_login" }, { status: 400 });
@@ -53,7 +57,7 @@ export async function POST(request: Request) {
   ).toLowerCase();
 
   // Fetch attacker + defender in parallel
-  const raidColumns = "id, claimed, github_login, avatar_url, contributions, public_repos, total_stars, kudos_count, app_streak, raid_xp, current_week_contributions, current_week_kudos_given, current_week_kudos_received";
+  const raidColumns = "id, claimed, github_login, avatar_url, contributions, public_repos, total_stars, kudos_count, app_streak, raid_xp, current_week_contributions, current_week_kudos_given, current_week_kudos_received, last_raided_at, active_defenses";
   const [attackerRes, defenderRes] = await Promise.all([
     admin
       .from("developers")
@@ -97,6 +101,14 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Daily raid limit reached" }, { status: 429 });
     }
 
+    // Check 2-hour peace shield on defender
+    if (defender.last_raided_at) {
+      const shieldExpires = new Date(new Date(defender.last_raided_at).getTime() + 2 * 60 * 60 * 1000);
+      if (new Date() < shieldExpires) {
+        return NextResponse.json({ error: "Target has an active Peace Shield" }, { status: 429 });
+      }
+    }
+
     // Check weekly cooldown
     const now = new Date();
     const isoWeekStart = new Date(now);
@@ -116,51 +128,6 @@ export async function POST(request: Request) {
     }
   } catch {
     // raids table may not exist yet - allow raid
-  }
-
-  // Handle consumable boost
-  let boostBonus = 0;
-  let boostItemId: string | null = null;
-  let boostPurchaseIdToConsume: number | null = null;
-
-  if (boost_purchase_id) {
-    const { data: boostPurchase } = await admin
-      .from("purchases")
-      .select("id, item_id, status, items!inner(metadata)")
-      .eq("id", boost_purchase_id)
-      .eq("developer_id", attacker.id)
-      .eq("status", "completed")
-      .single();
-
-    if (boostPurchase) {
-      const meta = (boostPurchase.items as unknown as { metadata: { type: string; bonus: number } })?.metadata;
-      if (meta?.type === "raid_boost" && meta.bonus > 0) {
-        boostBonus = meta.bonus;
-        boostItemId = boostPurchase.item_id;
-        boostPurchaseIdToConsume = boostPurchase.id;
-      }
-    }
-  }
-
-  // Calculate scores
-  const attack = calculateAttackScore({
-    weeklyContributions: attacker.current_week_contributions ?? 0,
-    appStreak: attacker.app_streak ?? 0,
-    weeklyKudosGiven: attacker.current_week_kudos_given ?? 0,
-    boostBonus,
-  });
-
-  const defense = calculateDefenseScore({
-    weeklyContributions: defender.current_week_contributions ?? 0,
-    appStreak: defender.app_streak ?? 0,
-    weeklyKudosReceived: defender.current_week_kudos_received ?? 0,
-  });
-
-  const success = attack.total > defense.total;
-
-  // Add boost info to breakdown
-  if (boostItemId) {
-    attack.breakdown.boost_item = boostItemId;
   }
 
   // Determine vehicle + tag style from saved loadout (or override from request)
@@ -196,6 +163,142 @@ export async function POST(request: Request) {
   let tagStyle = "default";
   const savedTag = savedLoadout.tag ?? "default";
   tagStyle = savedTag === "default" || ownedSet.has(savedTag) ? savedTag : "default";
+
+  // Handle consumable boost / item
+  let boostBonus = 0;
+  let boostItemId: string | null = null;
+  let boostPurchaseIdToConsume: number | null = null;
+  let attackerConsumableItemId: string | null = null;
+  
+  if (consumable_item_id) {
+    // Check developer_consumables for the new items
+    const { data: consumable } = await admin
+      .from("developer_consumables")
+      .select("id, quantity, weekly_uses, last_reset_week")
+      .eq("developer_id", attacker.id)
+      .eq("item_id", consumable_item_id)
+      .single();
+      
+    if (consumable && consumable.quantity > 0) {
+      // Check weekly uses
+      const now = new Date();
+      const currentWeekStr = new Date(now.setDate(now.getDate() - now.getDay() + (now.getDay() === 0 ? -6 : 1))).toISOString().split('T')[0];
+      const resetWeekStr = new Date(consumable.last_reset_week).toISOString().split('T')[0];
+      
+      let currentUses = consumable.weekly_uses;
+      if (currentWeekStr !== resetWeekStr) {
+        currentUses = 0; // It's a new week
+      }
+      
+      if (currentUses < 3) {
+        attackerConsumableItemId = consumable_item_id;
+      }
+    }
+  } else if (boost_purchase_id) {
+    // Legacy support for basic boosts
+    const { data: boostPurchase } = await admin
+      .from("purchases")
+      .select("id, item_id, status, items!inner(metadata)")
+      .eq("id", boost_purchase_id)
+      .eq("developer_id", attacker.id)
+      .eq("status", "completed")
+      .single();
+
+    if (boostPurchase) {
+      const meta = (boostPurchase.items as unknown as { metadata: { type: string; bonus: number } })?.metadata;
+      if (meta?.type === "raid_boost" && meta.bonus > 0) {
+        boostBonus = meta.bonus;
+        boostItemId = boostPurchase.item_id;
+        boostPurchaseIdToConsume = boostPurchase.id;
+      }
+    }
+  }
+
+  // Handle Defender's Active Defenses
+  let activeDefenses: string[] = Array.isArray(defender.active_defenses) ? defender.active_defenses : [];
+  let defenderItemUsed = false;
+  
+  if (activeDefenses.length > 0) {
+    defenderItemUsed = true;
+  } else {
+    // Auto-equip check for offline users (has no active defenses currently equipped)
+    const { data: availableDefenses } = await admin
+      .from("developer_consumables")
+      .select("item_id, quantity, weekly_uses, last_reset_week")
+      .eq("developer_id", defender.id)
+      .gt("quantity", 0);
+      
+    if (availableDefenses && availableDefenses.length > 0) {
+      const now = new Date();
+      const currentWeekStr = new Date(now.setDate(now.getDate() - now.getDay() + (now.getDay() === 0 ? -6 : 1))).toISOString().split('T')[0];
+      
+      for (const def of availableDefenses) {
+        let currentUses = def.weekly_uses;
+        if (new Date(def.last_reset_week).toISOString().split('T')[0] !== currentWeekStr) {
+          currentUses = 0;
+        }
+        if (currentUses < 3) {
+          activeDefenses = [def.item_id];
+          defenderItemUsed = true;
+          break;
+        }
+      }
+    }
+  }
+
+  // Process Item interactions
+  const isEmpDevice = attackerConsumableItemId === "emp_device";
+  const isSabotageVirus = attackerConsumableItemId === "sabotage_virus";
+  
+  let defenderEffectiveDefense = activeDefenses.length > 0 ? activeDefenses[0] : null;
+  // Attacker EMP disables the defender's item
+  if (isEmpDevice && defenderEffectiveDefense) {
+    defenderEffectiveDefense = null;
+  }
+  
+  const isAirAttack = vehicle !== "vehicle_tank";
+  const isGroundAttack = vehicle === "vehicle_tank";
+
+  const isStealthCloak = defenderEffectiveDefense === "stealth_cloak";
+  const isEmpShield = defenderEffectiveDefense === "emp_shield";
+  const isAntiMissile = defenderEffectiveDefense === "anti_missile_system";
+  const isAntiTank = defenderEffectiveDefense === "anti_tank_mines";
+
+  // Calculate scores
+  const attack = calculateAttackScore({
+    weeklyContributions: attacker.current_week_contributions ?? 0,
+    appStreak: attacker.app_streak ?? 0,
+    weeklyKudosGiven: attacker.current_week_kudos_given ?? 0,
+    boostBonus,
+    stealthCloakActive: isStealthCloak,
+    empShieldActive: isEmpShield,
+  });
+
+  const defense = calculateDefenseScore({
+    weeklyContributions: isStealthCloak ? 0 : defender.current_week_contributions ?? 0,
+    appStreak: isStealthCloak ? 0 : defender.app_streak ?? 0,
+    weeklyKudosReceived: isStealthCloak ? 0 : defender.current_week_kudos_received ?? 0,
+    sabotageVirusActive: isSabotageVirus,
+    antiMissileActive: isAntiMissile,
+    antiTankActive: isAntiTank,
+    isAirAttack,
+    isGroundAttack,
+  });
+
+  const success = attack.total > defense.total;
+
+  // Add boost/item info to breakdown
+  if (boostItemId) {
+    attack.breakdown.boost_item = boostItemId;
+  }
+  if (attackerConsumableItemId) {
+    attack.breakdown.boost_item = attackerConsumableItemId;
+  }
+  if (defenderEffectiveDefense) {
+    defense.breakdown.boost_item = defenderEffectiveDefense;
+  }
+
+
 
   // Atomic insert with race condition prevention
   const { data: raidRow, error: raidError } = await admin.rpc("execute_raid", {
@@ -236,12 +339,50 @@ export async function POST(request: Request) {
 
     const raidId = inserted.id;
 
-    // Consume boost
+    // Apply 2-hour peace shield to defender and reset defenses
+    await admin
+      .from("developers")
+      .update({ last_raided_at: new Date().toISOString(), active_defenses: [] })
+      .eq("id", defender.id);
+
+    // Consume legacy boost
     if (boostPurchaseIdToConsume) {
       await admin
         .from("purchases")
         .update({ status: "consumed" })
         .eq("id", boostPurchaseIdToConsume);
+    }
+    
+    // Helper function to consume a tracking token from developer_consumables
+    const consumeDeveloperItem = async (devId: number, itemId: string) => {
+      const { data: inv } = await admin
+        .from("developer_consumables")
+        .select("id, quantity, weekly_uses, last_reset_week")
+        .eq("developer_id", devId)
+        .eq("item_id", itemId)
+        .single();
+        
+      if (!inv) return;
+      const now = new Date();
+      const currentWeekStr = new Date(now.setDate(now.getDate() - now.getDay() + (now.getDay() === 0 ? -6 : 1))).toISOString().split('T')[0];
+      const resetWeekStr = new Date(inv.last_reset_week).toISOString().split('T')[0];
+      let currentUses = inv.weekly_uses;
+      if (currentWeekStr !== resetWeekStr) currentUses = 0;
+      
+      await admin.from("developer_consumables").update({
+        quantity: Math.max(0, inv.quantity - 1),
+        weekly_uses: currentUses + 1,
+        last_reset_week: currentWeekStr,
+      }).eq("id", inv.id);
+    };
+
+    // Consume attacker item
+    if (attackerConsumableItemId) {
+      await consumeDeveloperItem(attacker.id, attackerConsumableItemId);
+    }
+    // Consume defender item
+    if (defenderItemUsed && activeDefenses.length > 0) {
+      await consumeDeveloperItem(defender.id, activeDefenses[0]);
     }
 
     // XP + tags + feed

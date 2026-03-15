@@ -659,10 +659,10 @@ export default function Building3D({ building, colors, atlasTexture, introMode, 
     const roof = new THREE.MeshStandardMaterial({
       color: colors.roof,
       emissive: new THREE.Color(colors.roof),
-      emissiveIntensity: 1.5,
+      emissiveIntensity: 2.2,
       roughness: 0.6,
     });
-    const emIntensity = building.custom_color ? 1.5 : 2.0;
+    const emIntensity = building.custom_color ? 2.0 : 2.8;
     const make = (tex: THREE.CanvasTexture) =>
       new THREE.MeshStandardMaterial({
         map: tex,
@@ -715,7 +715,7 @@ export default function Building3D({ building, colors, atlasTexture, introMode, 
     for (const mat of materials) {
       mat.transparent = dimmed || false;
       mat.opacity = dimmed ? 0.55 : 1;
-      mat.emissiveIntensity = dimmed ? 0.3 : (mat.map ? 2.0 : 1.5);
+      mat.emissiveIntensity = dimmed ? 0.3 : (mat.map ? 2.8 : 2.2);
     }
     if (labelMaterial) {
       labelMaterial.opacity = focused ? 0 : dimmed ? 0.15 : 1;

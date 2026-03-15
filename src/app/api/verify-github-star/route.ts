@@ -4,7 +4,7 @@ import { getSupabaseAdmin } from "@/lib/supabase";
 import { rateLimit } from "@/lib/rate-limit";
 
 const REPO_OWNER = "Ixotic27";
-const REPO_NAME = "leetcode-city";
+const REPO_NAME = "The-Leetcode-City";
 
 function ghHeaders(): HeadersInit {
   const h: HeadersInit = {

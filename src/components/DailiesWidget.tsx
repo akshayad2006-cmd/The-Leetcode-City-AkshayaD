@@ -10,6 +10,7 @@ interface Props {
   isMobile: boolean;
   onClaim: () => Promise<{ ok: boolean; streak: number; total: number; freeze_granted: boolean } | null>;
   onRefresh: () => Promise<void>;
+  onStartFly?: () => void;
 }
 
 function getTimeUntilReset(): string {
@@ -21,7 +22,7 @@ function getTimeUntilReset(): string {
   return `${h}h ${m}m`;
 }
 
-export default function DailiesWidget({ data, accent, shadow, isMobile, onClaim, onRefresh }: Props) {
+export default function DailiesWidget({ data, accent, shadow, isMobile, onClaim, onRefresh, onStartFly }: Props) {
   const [open, setOpen] = useState(!isMobile);
   const [claiming, setClaiming] = useState(false);
   const [claimResult, setClaimResult] = useState<{ freeze_granted: boolean } | null>(null);
@@ -176,6 +177,16 @@ export default function DailiesWidget({ data, accent, shadow, isMobile, onClaim,
                   </div>
                 )}
               </div>
+
+              {/* Action shortcut (e.g. Fly) */}
+              {!m.completed && onStartFly && m.id.startsWith("fly_") && (
+                <button
+                  onClick={onStartFly}
+                  className="btn-press ml-1 border border-cream/20 bg-cream/5 px-2 py-1 text-[9px] font-bold text-cream transition-colors hover:border-cream/40"
+                >
+                  FLY
+                </button>
+              )}
             </div>
           ))}
         </div>

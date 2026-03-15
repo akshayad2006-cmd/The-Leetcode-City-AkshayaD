@@ -32,12 +32,19 @@ export interface AttackInputs {
   appStreak: number;
   weeklyKudosGiven: number;
   boostBonus?: number;
+  stealthCloakActive?: boolean;
+  empShieldActive?: boolean;
 }
 
 export interface DefenseInputs {
   weeklyContributions: number;
   appStreak: number;
   weeklyKudosReceived: number;
+  sabotageVirusActive?: boolean;
+  antiMissileActive?: boolean;
+  antiTankActive?: boolean;
+  isAirAttack?: boolean;
+  isGroundAttack?: boolean;
 }
 
 export interface ScoreBreakdown {
@@ -53,11 +60,20 @@ export function calculateAttackScore(inputs: AttackInputs): {
   breakdown: ScoreBreakdown;
 } {
   const commits = inputs.weeklyContributions * 3;
-  const streak = inputs.appStreak * 1;
+  // Stealth cloak caps attacker streak contribution to 0
+  const streak = inputs.stealthCloakActive ? 0 : inputs.appStreak * 1;
   const kudos = inputs.weeklyKudosGiven * 2;
   const boost = inputs.boostBonus ?? 0;
+  
+  let total = commits + streak + kudos + boost;
+  
+  // EMP Shield reduces final attack score by 20%
+  if (inputs.empShieldActive) {
+    total = Math.floor(total * 0.8);
+  }
+
   return {
-    total: commits + streak + kudos + boost,
+    total,
     breakdown: {
       commits,
       streak,
@@ -74,8 +90,26 @@ export function calculateDefenseScore(inputs: DefenseInputs): {
   const commits = inputs.weeklyContributions * 3;
   const streak = inputs.appStreak * 1;
   const kudos = inputs.weeklyKudosReceived * 1;
+  
+  let total = commits + streak + kudos;
+
+  // Sabotage Virus reduces base defense score by 30%
+  if (inputs.sabotageVirusActive) {
+    total = Math.floor(total * 0.7);
+  }
+
+  // Anti-Missile grants +50% against Air attacks
+  if (inputs.antiMissileActive && inputs.isAirAttack) {
+    total = Math.floor(total * 1.5);
+  }
+
+  // Anti-Tank grants +50% against Ground attacks
+  if (inputs.antiTankActive && inputs.isGroundAttack) {
+    total = Math.floor(total * 1.5);
+  }
+
   return {
-    total: commits + streak + kudos,
+    total,
     breakdown: { commits, streak, kudos },
   };
 }
@@ -112,16 +146,27 @@ export interface RaidPreviewResponse {
   defender_login: string;
   defender_avatar: string | null;
   defender_building_height: number;
+  defender_scouted_defense: string | null;
+  defender_defense_type: "air" | "ground" | "all" | "stealth" | null;
   available_boosts: RaidBoostItem[];
   available_vehicles: RaidVehicleOption[];
+  available_offensive_items: RaidOffensiveItem[];
   vehicle: string;
 }
 
 export interface RaidBoostItem {
-  purchase_id: number;
+  purchase_id?: number;
+  inventory_id?: string;
   item_id: string;
   name: string;
-  bonus: number;
+  bonus?: number;
+  quantity?: number;
+}
+
+export interface RaidOffensiveItem {
+  item_id: string;
+  quantity: number;
+  uses_left_this_week: number;
 }
 
 export interface RaidExecuteResponse {

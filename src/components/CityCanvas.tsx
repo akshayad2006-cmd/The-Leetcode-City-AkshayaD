@@ -553,7 +553,7 @@ const _idealLook = new THREE.Vector3();
 const _blendedPos = new THREE.Vector3();
 const _yAxis = new THREE.Vector3(0, 1, 0);
 
-function AirplaneFlight({ onExit, onHud, onPause, pauseSignal = 0, hasOverlay = false, startPaused = false, vehicleType = "airplane", posRef }: { onExit: () => void; onHud: (s: number, a: number, x: number, z: number, yaw: number) => void; onPause: (paused: boolean) => void; pauseSignal?: number; hasOverlay?: boolean; startPaused?: boolean; vehicleType?: string; posRef?: React.MutableRefObject<THREE.Vector3> }) {
+function AirplaneFlight({ onExit, onHud, onPause, pauseSignal = 0, hasOverlay = false, startPaused = false, vehicleType = "airplane", posRef }: { onExit: (aborted: boolean) => void; onHud: (s: number, a: number, x: number, z: number, yaw: number) => void; onPause: (paused: boolean) => void; pauseSignal?: number; hasOverlay?: boolean; startPaused?: boolean; vehicleType?: string; posRef?: React.MutableRefObject<THREE.Vector3> }) {
   const { camera } = useThree();
   const ref = useRef<THREE.Group>(null);
   const orbitRef = useRef<any>(null);
@@ -692,8 +692,8 @@ function AirplaneFlight({ onExit, onHud, onPause, pauseSignal = 0, hasOverlay = 
           // Paused + overlay showing → let page.tsx close it
           return;
         } else {
-          // Paused + no overlay → exit fly mode
-          onExit();
+          // Paused + no overlay → exit fly mode (aborted)
+          onExit(true);
         }
       } else if (e.code === "KeyP" || e.code === "Space") {
         e.preventDefault();
@@ -1857,7 +1857,7 @@ interface Props {
   bridges?: CityBridge[];
   flyMode: boolean;
   flyVehicle?: string;
-  onExitFly: () => void;
+  onExitFly: (aborted?: boolean) => void;
   onCollect?: (score: number, earned: number, combo: number, collected: number, maxCombo: number) => void;
   themeIndex: number;
   onHud?: (speed: number, altitude: number, x: number, z: number, yaw: number) => void;
@@ -1900,7 +1900,7 @@ interface Props {
 function CityExposure({ cityEnergy }: { cityEnergy: number }) {
   const gl = useThree((s) => s.gl);
   const targetRef = useRef(1.3);
-  targetRef.current = 0.4 + 0.9 * Math.min(1, cityEnergy); // 0.4 at sleep, 1.3 at full
+  targetRef.current = 0.6 + 0.8 * Math.min(1, cityEnergy); // 0.6 at sleep, 1.4 at full
 
   useFrame(() => {
     const current = gl.toneMappingExposure;
@@ -2062,7 +2062,7 @@ export default function CityCanvas({ buildings, plazas, decorations, river, brid
             mipmapBlur
             luminanceThreshold={1}
             luminanceSmoothing={0.3}
-            intensity={1.2 * Math.max(0.1, cityEnergy ?? 1)}
+            intensity={1.8 * Math.max(0.15, cityEnergy ?? 1)}
           />
         </EffectComposer>
       )}

@@ -30,7 +30,7 @@ export interface RaidState {
 
 export interface RaidActions {
   startPreview: (targetLogin: string, buildings: CityBuilding[], myLogin: string) => void;
-  executeRaid: (boostPurchaseId?: number, vehicleId?: string) => void;
+  executeRaid: (boostPurchaseId?: number, vehicleId?: string, offensiveItemId?: string) => void;
   skipToShare: () => void;
   exitRaid: () => void;
   onPhaseComplete: (phase: RaidPhase) => void;
@@ -184,7 +184,7 @@ export function useRaidSequence(): [RaidState, RaidActions] {
   );
 
   const executeRaid = useCallback(
-    async (boostPurchaseId?: number, vehicleId?: string) => {
+    async (boostPurchaseId?: number, vehicleId?: string, offensiveItemId?: string) => {
       setState((prev) => ({ ...prev, loading: true }));
 
       try {
@@ -195,6 +195,7 @@ export function useRaidSequence(): [RaidState, RaidActions] {
             target_login: targetLoginRef.current,
             boost_purchase_id: boostPurchaseId,
             vehicle_id: vehicleId,
+            offensive_item_id: offensiveItemId,
           }),
         });
 

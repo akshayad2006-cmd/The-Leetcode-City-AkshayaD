@@ -41,7 +41,7 @@ export async function POST(request: Request) {
   // Fetch attacker
   const attackerRes = await admin
     .from("developers")
-    .select("id, claimed, app_streak, github_login, avatar_url, current_week_contributions, current_week_kudos_given")
+    .select("id, claimed, app_streak, github_login, avatar_url, current_week_contributions, current_week_kudos_given, owned_items")
     .eq("claimed_by", user.id)
     .single();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -54,7 +54,7 @@ export async function POST(request: Request) {
   // Fetch defender
   const defenderRes = await admin
     .from("developers")
-    .select("id, claimed, app_streak, avatar_url, github_login, contributions, current_week_contributions, current_week_kudos_received")
+    .select("id, claimed, app_streak, avatar_url, github_login, contributions, current_week_contributions, current_week_kudos_received, last_raided_at, active_defenses")
     .eq("github_login", target_login.toLowerCase())
     .single();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -105,25 +105,50 @@ export async function POST(request: Request) {
     if (targetRaidedThisWeek) {
       return NextResponse.json({ error: "Already raided this target this week" }, { status: 429 });
     }
+
+    // Check 2-hour peace shield
+    if (defender.last_raided_at) {
+      const lastRaided = new Date(defender.last_raided_at);
+      const shieldExpires = new Date(lastRaided.getTime() + 2 * 60 * 60 * 1000);
+      if (now < shieldExpires) {
+        return NextResponse.json({ error: "Target has an active Peace Shield" }, { status: 429 });
+      }
+    }
   } catch {
     // raids table may not exist yet - allow raid
   }
+
+  // Active Defenses
+  const activeDefenses: string[] = Array.isArray(defender.active_defenses) ? defender.active_defenses : [];
+  const hasSatellite = (attacker.owned_items ?? []).includes("scouting_satellite");
+  
+  // If attacker has Tactical Satellite, reveal all defenses. Otherwise just the first one.
+  const defenderScoutedDefense = hasSatellite 
+    ? (activeDefenses.length > 0 ? activeDefenses.join(", ") : null)
+    : (activeDefenses.length > 0 ? activeDefenses[0] : null);
+  const isStealthCloak = defenderScoutedDefense === "stealth_cloak";
+  const isEmpShield = defenderScoutedDefense === "emp_shield";
+  const isAntiMissile = defenderScoutedDefense === "anti_missile_system";
+  const isAntiTank = defenderScoutedDefense === "anti_tank_mines";
 
   // Calculate scores
   const attack = calculateAttackScore({
     weeklyContributions: attacker.current_week_contributions ?? 0,
     appStreak: attacker.app_streak ?? 0,
     weeklyKudosGiven: attacker.current_week_kudos_given ?? 0,
+    stealthCloakActive: isStealthCloak,
+    empShieldActive: isEmpShield,
   });
 
+  // Calculate base defense (won't include the +50% from active items because preview doesn't know attacker's vehicle yet)
   const defense = calculateDefenseScore({
-    weeklyContributions: defender.current_week_contributions ?? 0,
-    appStreak: defender.app_streak ?? 0,
-    weeklyKudosReceived: defender.current_week_kudos_received ?? 0,
+    weeklyContributions: isStealthCloak ? 0 : defender.current_week_contributions ?? 0,
+    appStreak: isStealthCloak ? 0 : defender.app_streak ?? 0,
+    weeklyKudosReceived: isStealthCloak ? 0 : defender.current_week_kudos_received ?? 0,
   });
 
-  // Fetch available boosts, owned vehicles, and saved raid loadout
-  const [{ data: boostPurchases }, { data: vehiclePurchases }, { data: raidLoadoutRow }] = await Promise.all([
+  // Fetch available boosts, owned vehicles, saved raid loadout, and offensive consumables
+  const [{ data: boostPurchases }, { data: vehiclePurchases }, { data: raidLoadoutRow }, { data: offensiveConsumables }] = await Promise.all([
     admin
       .from("purchases")
       .select("id, item_id, items!inner(name, metadata)")
@@ -142,6 +167,11 @@ export async function POST(request: Request) {
       .eq("developer_id", attacker.id)
       .eq("item_id", "raid_loadout")
       .maybeSingle(),
+    admin
+      .from("developer_consumables")
+      .select("item_id, quantity, weekly_uses, last_reset_week")
+      .eq("developer_id", attacker.id)
+      .in("item_id", ["emp_device", "sabotage_virus"]),
   ]);
 
   const availableBoosts: RaidBoostItem[] = (boostPurchases ?? []).map((p) => {
@@ -155,11 +185,14 @@ export async function POST(request: Request) {
   });
 
   // Build available vehicles list (always includes default airplane)
-  const VEHICLE_META: Record<string, { name: string; emoji: string }> = {
-    airplane: { name: "Airplane", emoji: "✈️" },
-    raid_helicopter: { name: "Helicopter", emoji: "🚁" },
-    raid_drone: { name: "Stealth Drone", emoji: "🛸" },
-    raid_rocket: { name: "Rocket", emoji: "🚀" },
+  const VEHICLE_META: Record<string, { name: string; emoji: string; type: string }> = {
+    airplane: { name: "Airplane", emoji: "✈️", type: "air" },
+    raid_helicopter: { name: "Helicopter", emoji: "🚁", type: "air" },
+    raid_drone: { name: "Stealth Drone", emoji: "🛸", type: "air" },
+    raid_rocket: { name: "Rocket", emoji: "🚀", type: "air" },
+    raid_b2_bomber: { name: "B-2 Bomber", emoji: "🛩️", type: "air" },
+    raid_ufo: { name: "UFO", emoji: "👽", type: "air" },
+    vehicle_tank: { name: "Heavy Tank", emoji: "🛡️", type: "ground" },
   };
 
   const ownedVehicleIds = new Set((vehiclePurchases ?? []).map((p) => p.item_id));
@@ -181,6 +214,28 @@ export async function POST(request: Request) {
   // Estimate building height from contributions
   const defenderHeight = Math.max(20, Math.min(300, defender.contributions * 0.15));
 
+  // Compute available offensive consumables (must have qty > 0 and < 3 weekly uses)
+  const now2 = new Date();
+  const isoWeekStart2 = new Date(now2);
+  const dow2 = now2.getDay();
+  isoWeekStart2.setDate(now2.getDate() - dow2 + (dow2 === 0 ? -6 : 1));
+  isoWeekStart2.setHours(0, 0, 0, 0);
+  const currentWeekStr = isoWeekStart2.toISOString().split('T')[0];
+  const availableOffensiveItems = (offensiveConsumables ?? []).filter(c => {
+    if (c.quantity <= 0) return false;
+    const lastReset = c.last_reset_week ? new Date(c.last_reset_week).toISOString().split('T')[0] : null;
+    const weeklyUses = lastReset === currentWeekStr ? c.weekly_uses : 0;
+    return weeklyUses < 3;
+  }).map(c => {
+    const lastReset = c.last_reset_week ? new Date(c.last_reset_week).toISOString().split('T')[0] : null;
+    const weeklyUses = lastReset === currentWeekStr ? c.weekly_uses : 0;
+    return {
+      item_id: c.item_id,
+      quantity: c.quantity,
+      uses_left_this_week: 3 - weeklyUses,
+    };
+  });
+
   return NextResponse.json({
     can_raid: true,
     raids_today: raidsToday ?? 0,
@@ -195,10 +250,13 @@ export async function POST(request: Request) {
     attacker_login: attacker.github_login,
     defender_login: defender.github_login,
     attacker_avatar: attacker.avatar_url ?? null,
-    defender_avatar: defender.avatar_url ?? null,
-    defender_building_height: defenderHeight,
+    defender_avatar: isStealthCloak ? null : defender.avatar_url ?? null,
+    defender_building_height: isStealthCloak ? 0 : defenderHeight,
+    defender_scouted_defense: defenderScoutedDefense,
+    defender_defense_type: isAntiMissile ? "air" : isAntiTank ? "ground" : isEmpShield ? "all" : isStealthCloak ? "stealth" : null,
     available_boosts: availableBoosts,
     available_vehicles,
+    available_offensive_items: availableOffensiveItems,
     vehicle,
   });
 }

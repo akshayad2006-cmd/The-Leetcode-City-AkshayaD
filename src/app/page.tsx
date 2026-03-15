@@ -429,6 +429,8 @@ function HomeContent() {
   const flyPausedAt = useRef(0);
   const flyTotalPauseMs = useRef(0);
   const [flyElapsedSec, setFlyElapsedSec] = useState(0);
+  const [quotaReached, setQuotaReached] = useState(false);
+  const [quotaNotified, setQuotaNotified] = useState(false);
   const [stats, setStats] = useState<CityStats>({ total_developers: 0, total_contributions: 0 });
   const [githubStars, setGithubStars] = useState<number>(0);
   const [milestoneCelebrations, setMilestoneCelebrations] = useState<{ milestone: number; reached_at: string }[]>([]);
@@ -497,6 +499,18 @@ function HomeContent() {
 
   // XP level-up toast
   const [levelUpLevel, setLevelUpLevel] = useState<number | null>(null);
+
+  // Monitor fly score for mission quota
+  useEffect(() => {
+    if (flyMode && !quotaNotified && flyScore.score >= 50) {
+      setQuotaReached(true);
+      setQuotaNotified(true);
+    }
+    if (!flyMode) {
+      setQuotaReached(false);
+      setQuotaNotified(false);
+    }
+  }, [flyMode, flyScore.score, quotaNotified]);
 
   // Fly onboarding
   const [showDailyNudge, setShowDailyNudge] = useState(false);
@@ -1402,6 +1416,87 @@ function HomeContent() {
     return () => timers.forEach(clearTimeout);
   }, [introMode]);
 
+  // Flight exit logic
+  const endFly = useCallback((aborted = false) => {
+    const wallMs = Date.now() - flyStartTime.current;
+    // Exclude pause time from flight duration
+    const currentPauseMs = flyPausedAt.current > 0 ? Date.now() - flyPausedAt.current : 0;
+    const flightMs = Math.max(0, wallMs - flyTotalPauseMs.current - currentPauseMs);
+    // Time bonus: % of base score scaled by how fast you finished (max +50% of base score)
+    // Rewards efficiency without letting quick-quits dominate
+    const FLY_TIME_LIMIT = 900; // 15 minutes as requested by user
+    const timeFraction = (!aborted && flyScore.collected > 0) ? Math.max(0, (FLY_TIME_LIMIT - flightMs / 1000) / FLY_TIME_LIMIT) : 0;
+    const timeBonus = Math.floor(flyScore.score * 0.5 * timeFraction);
+    const finalScore = flyScore.score + timeBonus;
+    // Read current PB fresh from localStorage (React state may be stale)
+    let currentPB = flyPersonalBest;
+    try { currentPB = Math.max(currentPB, parseInt(localStorage.getItem("leetcodecity_fly_pb") || "0", 10) || 0); } catch { }
+    // Only show "New PB!" if there WAS a previous best to beat (not on first-ever flight)
+    const isNewPB = currentPB > 0 && finalScore > currentPB;
+    // Update personal best
+    if (isNewPB) {
+      setFlyPersonalBest(finalScore);
+      try { localStorage.setItem("leetcodecity_fly_pb", String(finalScore)); } catch { }
+    }
+    // Update fly history (streak, days played, per-seed scores)
+    if (finalScore > 0) {
+      try {
+        const now = new Date();
+        const start = new Date(now.getFullYear(), 0, 0);
+        const dayOfYear = Math.floor((now.getTime() - start.getTime()) / 86400000);
+        const currentSeed = `${now.getFullYear()}-${dayOfYear}`;
+        const raw = localStorage.getItem("leetcodecity_fly_history");
+        const hist = raw ? JSON.parse(raw) : { seeds: {}, currentStreak: 0, longestStreak: 0, lastPlayedSeed: "" };
+        const prev = hist.seeds[currentSeed];
+        hist.seeds[currentSeed] = {
+          bestScore: Math.max(prev?.bestScore ?? 0, finalScore),
+          playCount: (prev?.playCount ?? 0) + 1,
+        };
+        // Recalculate streak
+        if (hist.lastPlayedSeed !== currentSeed) {
+          const yesterdayDay = dayOfYear - 1;
+          const yesterdaySeed = yesterdayDay >= 1 ? `${now.getFullYear()}-${yesterdayDay}` : `${now.getFullYear() - 1}-365`;
+          if (hist.lastPlayedSeed === yesterdaySeed) {
+            hist.currentStreak = (hist.currentStreak || 0) + 1;
+          } else if (!hist.lastPlayedSeed) {
+            hist.currentStreak = 1;
+          } else {
+            hist.currentStreak = 1;
+          }
+          hist.lastPlayedSeed = currentSeed;
+        }
+        hist.longestStreak = Math.max(hist.longestStreak || 0, hist.currentStreak);
+        localStorage.setItem("leetcodecity_fly_history", JSON.stringify(hist));
+      } catch { }
+    }
+    // Exit fly immediately (don't block on API)
+    setFlyMode(false); setFlyPaused(false); lastDistrictRef.current = null; setDistrictAnnouncement(null); clearTimeout(announceTimerRef.current);
+    // Feature 4: Show post-flight results (rank fills in async)
+    if (finalScore > 0) {
+      const captured = { score: finalScore, collected: flyScore.collected, maxCombo: flyScore.maxCombo, timeBonus, isNewPB };
+      // Show immediately with rank=0, then update when POST returns
+      setShowFlyResults({ ...captured, rank: 0, totalPilots: 0 });
+      if (flyResultsTimerRef.current) clearTimeout(flyResultsTimerRef.current);
+      flyResultsTimerRef.current = setTimeout(() => setShowFlyResults(null), 12000);
+      // Fire POST in background, update rank when it returns
+      if (session) {
+        const maxComboVal = Math.min(Math.max(flyScore.maxCombo, 1), 3);
+        fetch("/api/fly-scores", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ score: finalScore, collected: flyScore.collected, max_combo: maxComboVal, flight_ms: flightMs }),
+        })
+          .then((r) => r.ok ? r.json() : null)
+          .then((d) => {
+            if (d?.rank) {
+              setShowFlyResults((prev) => prev ? { ...prev, rank: d.rank, totalPilots: d.total_count } : null);
+            }
+          })
+          .catch(() => { });
+      }
+    }
+  }, [flyScore, flyPersonalBest, session]);
+
   const endIntro = useCallback(() => {
     setIntroMode(false);
     setIntroPhase(-1);
@@ -1822,10 +1917,10 @@ function HomeContent() {
 
   // City energy: devs coding -> city lights up. 0 devs = nearly dark, 5+ = full brightness
   const cityEnergy = useMemo(() => {
-    if (codingCount === 0) return 0.05;
-    if (codingCount === 1) return 0.35;
-    if (codingCount === 2) return 0.55;
-    if (codingCount <= 5) return 0.55 + (codingCount - 2) * 0.15; // 3->0.7, 5->1.0
+    if (codingCount === 0) return 0.4;
+    if (codingCount === 1) return 0.5;
+    if (codingCount === 2) return 0.65;
+    if (codingCount <= 5) return 0.65 + (codingCount - 2) * 0.12; // 3->0.77, 5->1.0
     if (codingCount <= 15) return 1.0 + (Math.min(codingCount, 15) - 5) * 0.02; // 10->1.1, 15->1.2
     return Math.min(1.4, 1.2 + (codingCount - 15) * 0.02); // 25+->1.4 cap
   }, [codingCount]);
@@ -1930,84 +2025,7 @@ function HomeContent() {
         bridges={bridges}
         flyMode={flyMode}
         flyVehicle={flyVehicle}
-        onExitFly={() => {
-          const wallMs = Date.now() - flyStartTime.current;
-          // Exclude pause time from flight duration
-          const currentPauseMs = flyPausedAt.current > 0 ? Date.now() - flyPausedAt.current : 0;
-          const flightMs = Math.max(0, wallMs - flyTotalPauseMs.current - currentPauseMs);
-          // Time bonus: % of base score scaled by how fast you finished (max +50% of base score)
-          // Rewards efficiency without letting quick-quits dominate
-          const FLY_TIME_LIMIT = 90;
-          const timeFraction = flyScore.collected > 0 ? Math.max(0, (FLY_TIME_LIMIT - flightMs / 1000) / FLY_TIME_LIMIT) : 0;
-          const timeBonus = Math.floor(flyScore.score * 0.5 * timeFraction);
-          const finalScore = flyScore.score + timeBonus;
-          // Read current PB fresh from localStorage (React state may be stale)
-          let currentPB = flyPersonalBest;
-          try { currentPB = Math.max(currentPB, parseInt(localStorage.getItem("leetcodecity_fly_pb") || "0", 10) || 0); } catch { }
-          // Only show "New PB!" if there WAS a previous best to beat (not on first-ever flight)
-          const isNewPB = currentPB > 0 && finalScore > currentPB;
-          // Update personal best
-          if (isNewPB) {
-            setFlyPersonalBest(finalScore);
-            try { localStorage.setItem("leetcodecity_fly_pb", String(finalScore)); } catch { }
-          }
-          // Update fly history (streak, days played, per-seed scores)
-          if (finalScore > 0) {
-            try {
-              const now = new Date();
-              const start = new Date(now.getFullYear(), 0, 0);
-              const dayOfYear = Math.floor((now.getTime() - start.getTime()) / 86400000);
-              const currentSeed = `${now.getFullYear()}-${dayOfYear}`;
-              const raw = localStorage.getItem("leetcodecity_fly_history");
-              const hist = raw ? JSON.parse(raw) : { seeds: {}, currentStreak: 0, longestStreak: 0, lastPlayedSeed: "" };
-              const prev = hist.seeds[currentSeed];
-              hist.seeds[currentSeed] = {
-                bestScore: Math.max(prev?.bestScore ?? 0, finalScore),
-                playCount: (prev?.playCount ?? 0) + 1,
-              };
-              // Recalculate streak
-              if (hist.lastPlayedSeed !== currentSeed) {
-                const yesterdayDay = dayOfYear - 1;
-                const yesterdaySeed = yesterdayDay >= 1 ? `${now.getFullYear()}-${yesterdayDay}` : `${now.getFullYear() - 1}-365`;
-                if (hist.lastPlayedSeed === yesterdaySeed) {
-                  hist.currentStreak = (hist.currentStreak || 0) + 1;
-                } else if (!hist.lastPlayedSeed) {
-                  hist.currentStreak = 1;
-                } else {
-                  hist.currentStreak = 1;
-                }
-                hist.lastPlayedSeed = currentSeed;
-              }
-              hist.longestStreak = Math.max(hist.longestStreak || 0, hist.currentStreak);
-              localStorage.setItem("leetcodecity_fly_history", JSON.stringify(hist));
-            } catch { }
-          }
-          // Exit fly immediately (don't block on API)
-          setFlyMode(false); setFlyPaused(false); lastDistrictRef.current = null; setDistrictAnnouncement(null); clearTimeout(announceTimerRef.current);
-          // Feature 4: Show post-flight results (rank fills in async)
-          if (finalScore > 0) {
-            const captured = { score: finalScore, collected: flyScore.collected, maxCombo: flyScore.maxCombo, timeBonus, isNewPB };
-            // Show immediately with rank=0, then update when POST returns
-            setShowFlyResults({ ...captured, rank: 0, totalPilots: 0 });
-            flyResultsTimerRef.current = setTimeout(() => setShowFlyResults(null), 12000);
-            // Fire POST in background, update rank when it returns
-            if (session) {
-              const maxComboVal = Math.min(Math.max(flyScore.maxCombo, 1), 3);
-              fetch("/api/fly-scores", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ score: finalScore, collected: flyScore.collected, max_combo: maxComboVal, flight_ms: flightMs }),
-              })
-                .then((res) => res.ok ? res.json() : null)
-                .then((data) => {
-                  if (data) {
-                    setShowFlyResults((prev) => prev ? { ...prev, rank: data.rank_today ?? 0, totalPilots: data.total ?? 0 } : null);
-                  }
-                })
-                .catch(() => { });
-            }
-          }
-        }}
+        onExitFly={endFly}
         themeIndex={themeIndex}
         onHud={(s, a, x, z, yaw) => {
           setHud({ speed: s, altitude: a });
@@ -2293,8 +2311,39 @@ function HomeContent() {
                   &times;{flyScore.combo >= 4 ? 3 : flyScore.combo >= 3 ? 2 : 1.5}
                 </span>
               )}
+              
+              <button
+                onClick={() => endFly(false)}
+                className="btn-press ml-2 border border-border-light bg-bg-raised/80 px-2 py-1 text-[9px] font-bold text-cream transition-colors hover:bg-border"
+              >
+                EXIT
+              </button>
             </div>
           </div>
+
+          {/* Quota notification popover */}
+          {quotaReached && (
+            <div className="absolute top-20 left-1/2 z-50 -translate-x-1/2 animate-bounce-short">
+              <div className="flex flex-col items-center gap-2 border-[3px] border-[#4ade80] bg-bg/90 p-4 text-center backdrop-blur-md shadow-lg">
+                <div className="text-[12px] font-bold text-[#4ade80]">MISSION QUOTA MATCHED!</div>
+                <div className="text-[10px] text-cream/80">You've reached 50 PX. Exit now to complete quest?</div>
+                <div className="mt-2 flex gap-3">
+                  <button
+                    onClick={() => endFly(false)}
+                    className="btn-press bg-[#4ade80] px-3 py-1.5 text-[10px] font-bold text-bg transition-all hover:brightness-110"
+                  >
+                    EXIT NOW
+                  </button>
+                  <button
+                    onClick={() => setQuotaReached(false)}
+                    className="btn-press border border-cream/30 bg-bg/50 px-3 py-1.5 text-[10px] text-cream transition-colors hover:bg-bg-raised"
+                  >
+                    KEEP FLYING
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Score HUD (top right) */}
           <div className="absolute top-4 right-3 text-right text-[9px] text-muted sm:right-4 sm:text-[10px]">
@@ -2304,8 +2353,8 @@ function HomeContent() {
             </div>
             <div className="mt-1.5 text-[8px]">
               <span className="text-muted">TIME </span>
-              <span style={{ color: flyElapsedSec < 90 ? theme.accent : "#f85149" }}>
-                {Math.floor(flyElapsedSec / 60)}:{String(flyElapsedSec % 60).padStart(2, "0")}
+              <span style={{ color: flyElapsedSec < 900 ? theme.accent : "#f85149" }}>
+                {Math.floor(flyElapsedSec / 60)}:{String(flyElapsedSec % 60).padStart(2, "0")} / 15:00
               </span>
             </div>
             {flyPersonalBest > 0 && (
@@ -2523,7 +2572,7 @@ function HomeContent() {
           >
             <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" className="text-cream"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0016 8c0-4.42-3.58-8-8-8z" /></svg>
             <span style={{ color: theme.accent }}>&#9733;</span>
-            {starCount != null && <span className="text-cream">{starCount.toLocaleString()}</span>}
+            {githubStars != null && <span className="text-cream">{githubStars.toLocaleString()}</span>}
           </a>
           <a
             href="https://discord.gg/UQrhNNZvmj"
@@ -2787,15 +2836,16 @@ function HomeContent() {
               {MILESTONE_MODE === "stars" ? (
                 // ── LeetCode Stars mode ──
                 (() => {
-                  const target = 100;
+                  const MILESTONES = [100, 250, 500, 1000, 2000, 5000];
                   const current = githubStars;
+                  const target = MILESTONES.find((m) => current < m) || 10000;
                   const pct = Math.min(100, (current / target) * 100);
                   const isDone = current >= target;
 
                   return (
                     <div className="pointer-events-auto mt-4 w-full max-w-[320px] rounded border border-border bg-bg/80 p-3 pt-2 shadow-xl backdrop-blur-md">
                       <div className="mb-1.5 flex items-center justify-between text-[8px] uppercase tracking-widest text-cream">
-                        <span>{isDone ? "GOAL REACHED" : "ROAD TO 100 STARS"}</span>
+                        <span>{isDone ? "GOAL REACHED" : `ROAD TO ${target} STARS`}</span>
                         <span style={{ color: theme.accent }}>{Math.max(0, target - current).toLocaleString()} TO GO</span>
                       </div>
                       <div className="h-1.5 w-full overflow-hidden rounded-full bg-bg shadow-inner">
@@ -2820,7 +2870,7 @@ function HomeContent() {
                         </a>
                         {" | "}
                         <a
-                          href="https://github.com/ishant-27/git-city"
+                          href="https://github.com/srizzon/git-city"
                           target="_blank"
                           rel="noopener noreferrer"
                           className="text-[#ffa116] hover:underline"
@@ -4374,6 +4424,7 @@ function HomeContent() {
           isMobile={isMobile}
           onClaim={claimDailies}
           onRefresh={refreshDailies}
+          onStartFly={() => setFlyMode(true)}
         />
       )}
 
@@ -4719,7 +4770,7 @@ function HomeContent() {
           preview={raidState.previewData}
           loading={raidState.loading}
           error={raidState.error}
-          onRaid={(boostPurchaseId, vehicleId) => raidActions.executeRaid(boostPurchaseId, vehicleId)}
+          onRaid={(boostPurchaseId, vehicleId, offensiveItemId) => raidActions.executeRaid(boostPurchaseId, vehicleId, offensiveItemId)}
           onCancel={raidActions.exitRaid}
         />
       )}

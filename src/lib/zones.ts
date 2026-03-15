@@ -37,19 +37,29 @@ export const ITEM_NAMES: Record<string, string> = {
   raid_helicopter: "Helicopter",
   raid_drone: "Stealth Drone",
   raid_rocket: "Rocket",
+  raid_b2_bomber: "B-2 Bomber",
+  raid_ufo: "UFO",
+  vehicle_tank: "Heavy Tank",
   // Raid tags
   tag_neon: "Neon Tag",
   tag_fire: "Fire Tag",
   tag_gold: "Gold Tag",
-  // Raid boosters
+  // Raid boosters & consumables
   raid_boost_small: "War Paint",
   raid_boost_medium: "Battle Armor",
   raid_boost_large: "EMP Device",
+  anti_missile_system: "Anti-Missile System",
+  anti_tank_mines: "Anti-Tank Mines",
+  emp_shield: "Faraday Cage",
+  stealth_cloak: "Hologram Cloak",
+  emp_device: "EMP Offense Device",
+  sabotage_virus: "Sabotage Virus",
   white_rabbit: "White Rabbit",
   github_star: "GitHub Star",
   ac_badge: "Accepted Badge",
   tle_fire: "TLE Fire",
   binary_tree: "Binary Tree",
+  scouting_satellite: "Tactical Satellite",
 };
 
 // Correct mapping: item_id → achievement that unlocks it (from migration 007 seed)
@@ -62,6 +72,21 @@ export const ACHIEVEMENT_ITEMS: Record<string, { achievement: string; label: str
   spotlight: { achievement: "rising_star", label: "Rising Star (100+ stars)" },
   helipad: { achievement: "recruiter", label: "Recruiter (10+ referrals)" },
   white_rabbit: { achievement: "white_rabbit", label: "Found the White Rabbit" },
+  scouting_satellite: { achievement: "leetcode_questions", label: "Solve 10 Medium or 5 Hard LeetCode Questions" },
+};
+
+export const ITEM_UNLOCK_LEVELS: Record<string, number> = {
+  anti_missile_system: 5,
+  anti_tank_mines: 7,
+  emp_shield: 10,
+  stealth_cloak: 15,
+  raid_drone: 8,
+  raid_rocket: 12,
+  raid_b2_bomber: 20,
+  raid_ufo: 30,
+  vehicle_tank: 10,
+  emp_device: 18,
+  sabotage_virus: 22,
 };
 
 export const ITEM_EMOJIS: Record<string, string> = {
@@ -75,12 +100,22 @@ export const ITEM_EMOJIS: Record<string, string> = {
   raid_helicopter: "🚁",
   raid_drone: "🛸",
   raid_rocket: "🚀",
+  raid_b2_bomber: "🛩️",
+  raid_ufo: "👽",
+  vehicle_tank: "🛡️",
   tag_neon: "🌈",
   tag_fire: "🔥",
   tag_gold: "🥇",
   raid_boost_small: "🎨",
   raid_boost_medium: "🛡️",
   raid_boost_large: "💣",
+  anti_missile_system: "🚀",
+  anti_tank_mines: "💥",
+  emp_shield: "🔋",
+  stealth_cloak: "👻",
+  emp_device: "🔌",
+  sabotage_virus: "🦠",
+  scouting_satellite: "🛰️",
   white_rabbit: "🐇",
   github_star: "⭐",
   ac_badge: "✅",
@@ -90,6 +125,7 @@ export const ITEM_EMOJIS: Record<string, string> = {
 
 export const FACES_ITEMS = ["custom_color", "billboard", "led_banner"];
 
-export const RAID_VEHICLE_ITEMS = ["raid_helicopter", "raid_drone", "raid_rocket"];
+export const RAID_VEHICLE_ITEMS = ["raid_helicopter", "raid_drone", "raid_rocket", "raid_b2_bomber", "raid_ufo", "vehicle_tank"];
 export const RAID_TAG_ITEMS = ["tag_neon", "tag_fire", "tag_gold"];
 export const RAID_BOOST_ITEMS = ["raid_boost_small", "raid_boost_medium", "raid_boost_large"];
+export const RAID_CONSUMABLE_ITEMS = ["anti_missile_system", "anti_tank_mines", "emp_shield", "stealth_cloak", "emp_device", "sabotage_virus", "scouting_satellite"];

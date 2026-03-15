@@ -53,7 +53,7 @@ function generateCode(prefix: string): string {
 
 async function main() {
     // Validate item exists
-    const { data: item } = await sb.from("items").select("id, name").eq("id", itemId).single();
+    const { data: item } = await sb.from("items").select("id, name").eq("id", itemId!).single();
     if (!item) {
         console.error(`\n❌ Item "${itemId}" not found in the database.`);
         
@@ -75,12 +75,12 @@ async function main() {
     const codes: string[] = [];
 
     for (let i = 0; i < count; i++) {
-        let code = generateCode(itemId);
+        let code = generateCode(itemId!);
         // Retry if collision (extremely unlikely)
         for (let tries = 0; tries < 5; tries++) {
             const { error } = await sb.from("redeem_codes").insert({
                 code,
-                item_id: itemId,
+                item_id: itemId!,
                 max_uses: maxUses,
                 used_count: 0,
                 expires_at: expiresAt,
@@ -91,7 +91,7 @@ async function main() {
                 break;
             } else if (error.code === "23505") {
                 // Unique violation — regenerate
-                code = generateCode(itemId);
+                code = generateCode(itemId!);
             } else {
                 console.error(`❌ DB error for code ${code}:`, error.message);
                 break;

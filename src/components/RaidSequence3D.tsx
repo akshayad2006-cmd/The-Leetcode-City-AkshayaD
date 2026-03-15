@@ -317,11 +317,186 @@ function RocketMesh() {
   );
 }
 
+function B2BomberMesh() {
+  return (
+    <group>
+      {/* Main body (flying wing) */}
+      <mesh position={[0, 0, 0]}>
+        <boxGeometry args={[3, 0.2, 2]} />
+        <meshStandardMaterial color="#1a1a1c" emissive="#0d0d0f" emissiveIntensity={0.5} />
+      </mesh>
+      {/* Cockpit hump */}
+      <mesh position={[0, 0.2, -0.2]}>
+        <boxGeometry args={[0.8, 0.3, 1]} />
+        <meshStandardMaterial color="#111112" emissive="#080809" emissiveIntensity={0.4} />
+      </mesh>
+      {/* Wing sweeps (angled) */}
+      <mesh position={[-2.4, 0, 0.8]} rotation={[0, -Math.PI / 5, 0]}>
+        <boxGeometry args={[3, 0.15, 1.2]} />
+        <meshStandardMaterial color="#1a1a1c" emissive="#0d0d0f" emissiveIntensity={0.5} />
+      </mesh>
+      <mesh position={[2.4, 0, 0.8]} rotation={[0, Math.PI / 5, 0]}>
+        <boxGeometry args={[3, 0.15, 1.2]} />
+        <meshStandardMaterial color="#1a1a1c" emissive="#0d0d0f" emissiveIntensity={0.5} />
+      </mesh>
+      {/* Wing tips */}
+      <mesh position={[-4.5, 0, 1.4]} rotation={[0, -Math.PI / 3.5, 0]}>
+        <boxGeometry args={[2.5, 0.1, 0.8]} />
+        <meshStandardMaterial color="#1a1a1c" emissive="#0d0d0f" emissiveIntensity={0.5} />
+      </mesh>
+      <mesh position={[4.5, 0, 1.4]} rotation={[0, Math.PI / 3.5, 0]}>
+        <boxGeometry args={[2.5, 0.1, 0.8]} />
+        <meshStandardMaterial color="#1a1a1c" emissive="#0d0d0f" emissiveIntensity={0.5} />
+      </mesh>
+      {/* Engine exhausts */}
+      <mesh position={[-1.2, 0.1, 1.0]}>
+        <boxGeometry args={[0.7, 0.1, 0.3]} />
+        <meshStandardMaterial color="#000" emissive="#000" emissiveIntensity={0} />
+      </mesh>
+      <mesh position={[1.2, 0.1, 1.0]}>
+        <boxGeometry args={[0.7, 0.1, 0.3]} />
+        <meshStandardMaterial color="#000" emissive="#000" emissiveIntensity={0} />
+      </mesh>
+      <pointLight position={[-1.2, 0, 1.2]} color="#44aaff" intensity={1} distance={4} />
+      <pointLight position={[1.2, 0, 1.2]} color="#44aaff" intensity={1} distance={4} />
+    </group>
+  );
+}
+
+function UFOMesh() {
+  const spinRef = useRef<THREE.Group>(null);
+  useFrame((_, delta) => {
+    if (spinRef.current) spinRef.current.rotation.y += delta * 5;
+  });
+
+  return (
+    <group>
+      {/* Main saucer */}
+      <mesh>
+        <cylinderGeometry args={[2, 2, 0.3, 32]} />
+        <meshStandardMaterial color="#d1d5db" emissive="#6b7280" emissiveIntensity={0.3} />
+      </mesh>
+      <mesh position={[0, 0.05, 0]}>
+        <cylinderGeometry args={[1.6, 2.2, 0.4, 32]} />
+        <meshStandardMaterial color="#9ca3af" emissive="#4b5563" emissiveIntensity={0.4} />
+      </mesh>
+      {/* Glass dome */}
+      <mesh position={[0, 0.4, 0]}>
+        <sphereGeometry args={[1, 16, 16, 0, Math.PI * 2, 0, Math.PI / 2]} />
+        <meshStandardMaterial color="#10b981" emissive="#059669" emissiveIntensity={1} transparent opacity={0.6} />
+      </mesh>
+      {/* Spinning lights ring */}
+      <group ref={spinRef} position={[0, 0.15, 0]}>
+        {Array.from({ length: 12 }).map((_, i) => {
+          const angle = (i / 12) * Math.PI * 2;
+          return (
+            <mesh key={i} position={[Math.cos(angle) * 2.1, 0, Math.sin(angle) * 2.1]} rotation={[0, 0, Math.PI / 2]}>
+              <sphereGeometry args={[0.08, 8, 8]} />
+              <meshStandardMaterial color="#34d399" emissive="#10b981" emissiveIntensity={3} toneMapped={false} />
+            </mesh>
+          );
+        })}
+      </group>
+      {/* Bottom glowing core */}
+      <mesh position={[0, -0.1, 0]}>
+        <cylinderGeometry args={[0.8, 0.6, 0.3, 16]} />
+        <meshStandardMaterial color="#34d399" emissive="#10b981" emissiveIntensity={2} toneMapped={false} />
+      </mesh>
+      <pointLight position={[0, -0.5, 0]} color="#10b981" intensity={3} distance={8} />
+    </group>
+  );
+}
+
+function TankMesh() {
+  const treadsRef = useRef<THREE.Group>(null);
+  
+  // Animate treads moving slightly
+  useFrame((state) => {
+    if (treadsRef.current) {
+      treadsRef.current.position.z = (state.clock.elapsedTime * 2) % 0.2;
+    }
+  });
+
+  return (
+    <group position={[0, -0.8, 0]}> {/* Offset down to simulate ground level */}
+      {/* Main Hull */}
+      <mesh position={[0, 0, 0]}>
+        <boxGeometry args={[1.5, 0.6, 2.5]} />
+        <meshStandardMaterial color="#4b5320" emissive="#2c3012" emissiveIntensity={0.2} />
+      </mesh>
+      {/* Turret Structure */}
+      <mesh position={[0, 0.45, -0.2]}>
+        <cylinderGeometry args={[0.5, 0.6, 0.4, 8]} />
+        <meshStandardMaterial color="#3a4018" />
+      </mesh>
+      {/* Main Cannon */}
+      <mesh position={[0, 0.45, 1.2]} rotation={[Math.PI / 2, 0, 0]}>
+        <cylinderGeometry args={[0.08, 0.12, 1.8, 8]} />
+        <meshStandardMaterial color="#222" />
+      </mesh>
+      {/* Cannon Muzzle Brake */}
+      <mesh position={[0, 0.45, 2.1]} rotation={[Math.PI / 2, 0, 0]}>
+        <cylinderGeometry args={[0.15, 0.15, 0.2, 8]} />
+        <meshStandardMaterial color="#111" />
+      </mesh>
+      {/* Treads/Tracks (Left) */}
+      <group position={[-0.85, -0.15, 0]}>
+        <mesh>
+          <boxGeometry args={[0.3, 0.5, 2.8]} />
+          <meshStandardMaterial color="#111" />
+        </mesh>
+        <group ref={treadsRef}>
+          {Array.from({ length: 8 }).map((_, i) => (
+            <mesh key={i} position={[0, 0, -1.2 + i * 0.35]}>
+              <boxGeometry args={[0.32, 0.52, 0.05]} />
+              <meshStandardMaterial color="#333" />
+            </mesh>
+          ))}
+        </group>
+      </group>
+      {/* Treads/Tracks (Right) */}
+      <group position={[0.85, -0.15, 0]}>
+        <mesh>
+          <boxGeometry args={[0.3, 0.5, 2.8]} />
+          <meshStandardMaterial color="#111" />
+        </mesh>
+        {/* Wheels inside tracks */}
+        {Array.from({ length: 5 }).map((_, i) => (
+          <mesh key={`r-wheel-${i}`} position={[0, 0, -1 + i * 0.5]} rotation={[0, 0, Math.PI / 2]}>
+            <cylinderGeometry args={[0.2, 0.2, 0.35, 16]} />
+            <meshStandardMaterial color="#2a2e12" />
+          </mesh>
+        ))}
+        {Array.from({ length: 5 }).map((_, i) => (
+          <mesh key={`l-wheel-${i}`} position={[-1.7, 0, -1 + i * 0.5]} rotation={[0, 0, Math.PI / 2]}>
+            <cylinderGeometry args={[0.2, 0.2, 0.35, 16]} />
+            <meshStandardMaterial color="#2a2e12" />
+          </mesh>
+        ))}
+      </group>
+      {/* Headlights */}
+      <mesh position={[-0.6, 0.1, 1.26]}>
+        <boxGeometry args={[0.2, 0.1, 0.1]} />
+        <meshStandardMaterial color="#ffaa00" emissive="#ffaa00" emissiveIntensity={2} toneMapped={false} />
+      </mesh>
+      <mesh position={[0.6, 0.1, 1.26]}>
+        <boxGeometry args={[0.2, 0.1, 0.1]} />
+        <meshStandardMaterial color="#ffaa00" emissive="#ffaa00" emissiveIntensity={2} toneMapped={false} />
+      </mesh>
+      <pointLight position={[-0.6, 0.1, 1.5]} color="#ffaa00" intensity={1} distance={3} />
+      <pointLight position={[0.6, 0.1, 1.5]} color="#ffaa00" intensity={1} distance={3} />
+    </group>
+  );
+}
+
 export function VehicleMesh({ type }: { type: string }) {
   switch (type) {
     case "raid_helicopter": return <HelicopterMesh />;
     case "raid_drone": return <DroneMesh />;
     case "raid_rocket": return <RocketMesh />;
+    case "raid_b2_bomber": return <B2BomberMesh />;
+    case "raid_ufo": return <UFOMesh />;
+    case "vehicle_tank": return <TankMesh />;
     default: return <AirplaneMesh />;
   }
 }
