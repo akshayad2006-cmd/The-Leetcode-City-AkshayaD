@@ -18,15 +18,15 @@ jobs:
         if: github.event_name == 'issues' && github.event.action == 'opened'
         uses: actions/github-script@v7
         env:
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           script: |
             const issue = context.payload.issue;
-            const apiKey = process.env.OPENAI_API_KEY;
+            const apiKey = process.env.GH_TOKEN;
             
-            // Skip if no API key is provided
+            // Skip if no token
             if (!apiKey) {
-              console.log("No OPENAI_API_KEY secret found. Skipping AI triage.");
+              console.log("No GITHUB_TOKEN found. Skipping AI triage.");
               return;
             }
             
@@ -41,7 +41,7 @@ jobs:
             If it's poor quality or a duplicate, gently ask for more details or clarification. Keep it concise.`;
             
             try {
-              const res = await fetch('https://api.openai.com/v1/chat/completions', {
+              const res = await fetch('https://models.inference.ai.azure.com/chat/completions', {
                 method: 'POST',
                 headers: {
                   'Content-Type': 'application/json',
