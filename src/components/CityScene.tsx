@@ -114,6 +114,7 @@ interface CitySceneProps {
   holdRise?: boolean;
   liveByLogin?: Map<string, LiveSession>;
   cityEnergy?: number;
+  timeRef?: React.MutableRefObject<number>;
 }
 
 function RainWeather() {
@@ -190,6 +191,7 @@ export default function CityScene({
   holdRise,
   liveByLogin,
   cityEnergy,
+  timeRef,
 }: CitySceneProps) {
   const atlasTexture = useMemo(() => createWindowAtlas(colors), [colors]);
   const grid = useMemo(
@@ -254,11 +256,12 @@ export default function CityScene({
         atlasTexture={atlasTexture}
         focusedBuilding={focusedBuilding}
         focusedBuildingB={focusedBuildingB}
-        introMode={introMode}
         onBuildingClick={onBuildingClick}
+        introMode={introMode}
         holdRise={holdRise}
         liveByLogin={liveByLogin}
         cityEnergy={cityEnergy}
+        timeRef={timeRef}
       />
 
 

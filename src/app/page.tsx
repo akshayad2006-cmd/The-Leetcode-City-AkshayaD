@@ -567,6 +567,7 @@ function HomeContent() {
   const [introPhase, setIntroPhase] = useState(-1); // -1 = not started, 0-3 = text phases, 4 = done
   const [exploreMode, setExploreMode] = useState(false);
   const [themeIndex, setThemeIndex] = useState(0);
+  const [dayNightCycleActive, setDayNightCycleActive] = useState(true);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -575,6 +576,12 @@ function HomeContent() {
       const n = parseInt(saved, 10);
       if (n >= 0 && n <= 3) setThemeIndex(n);
     }
+    try {
+      const savedCycle = localStorage.getItem("leetcodecity_daynight_cycle");
+      if (savedCycle === "0") {
+        setDayNightCycleActive(false);
+      }
+    } catch {}
   }, []);
 
   const [hud, setHud] = useState({ speed: 0, altitude: 0 });
@@ -2613,6 +2620,7 @@ function HomeContent() {
         flyVehicle={flyVehicle}
         onExitFly={endFly}
         themeIndex={themeIndex}
+        dayNightCycleActive={dayNightCycleActive}
         onHud={(s, a, x, z, yaw) => {
           setHud({ speed: s, altitude: a });
           // Look-ahead: ~40u ahead of airplane = center of screen
@@ -3247,7 +3255,7 @@ function HomeContent() {
             </button>
           </div>
 
-          {/* Theme switcher + Radio (bottom-left) — above ticker */}
+          {/* Theme switcher + Cycle + Radio (bottom-left) — above ticker */}
           <div className="pointer-events-auto fixed bottom-10 left-3 z-[31] flex items-center gap-2 sm:left-4">
             <button
               onClick={cycleTheme}
@@ -3258,6 +3266,25 @@ function HomeContent() {
               <span className="text-dim">
                 {themeIndex + 1}/{THEMES.length}
               </span>
+            </button>
+            <button
+              onClick={() => {
+                setDayNightCycleActive((prev) => {
+                  const next = !prev;
+                  try {
+                    localStorage.setItem("leetcodecity_daynight_cycle", next ? "1" : "0");
+                  } catch {}
+                  return next;
+                });
+              }}
+              className={`btn-press flex items-center gap-1.5 border-[3px] px-2.5 py-1 text-[10px] backdrop-blur-sm transition-colors ${
+                dayNightCycleActive
+                  ? "border-amber-500/80 bg-amber-500/10 text-amber-400 hover:border-amber-400"
+                  : "border-border bg-bg/70 text-cream hover:border-border-light"
+              }`}
+            >
+              <span style={{ color: theme.accent }}>&#9654;</span>
+              <span>{dayNightCycleActive ? "CYCLE ON" : "CYCLE OFF"}</span>
             </button>
             {isMounted && <div id="gc-radio-slot" />}
           </div>
@@ -5688,6 +5715,8 @@ function HomeContent() {
             themeIndex={themeIndex}
             themesLength={THEMES.length}
             isMounted={isMounted}
+            dayNightCycleActive={dayNightCycleActive}
+            setDayNightCycleActive={setDayNightCycleActive}
           />
         </div>
       )}

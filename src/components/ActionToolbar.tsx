@@ -10,6 +10,8 @@ interface ActionToolbarProps {
   themeIndex: number;
   themesLength: number;
   isMounted: boolean;
+  dayNightCycleActive: boolean;
+  setDayNightCycleActive: React.Dispatch<React.SetStateAction<boolean>>;
 }
 
 const ActionToolbar: React.FC<ActionToolbarProps> = ({
@@ -19,6 +21,8 @@ const ActionToolbar: React.FC<ActionToolbarProps> = ({
   themeIndex,
   themesLength,
   isMounted,
+  dayNightCycleActive,
+  setDayNightCycleActive,
 }) => {
   return (
     <div className="flex items-center gap-2">
@@ -30,6 +34,27 @@ const ActionToolbar: React.FC<ActionToolbarProps> = ({
         <span style={{ color: theme.accent }}>&#9654;</span>
         <span className="text-cream">{theme.name}</span>
         <span className="text-dim">{themeIndex + 1}/{themesLength}</span>
+      </button>
+
+      {/* Day/Night Cycle Button */}
+      <button
+        onClick={() => {
+          setDayNightCycleActive((prev) => {
+            const next = !prev;
+            try {
+              localStorage.setItem("leetcodecity_daynight_cycle", next ? "1" : "0");
+            } catch {}
+            return next;
+          });
+        }}
+        className={`btn-press flex items-center gap-1.5 border-[3px] px-2.5 py-1 text-[10px] backdrop-blur-sm transition-colors ${
+          dayNightCycleActive
+            ? "border-amber-500/80 bg-amber-500/10 text-amber-400 hover:border-amber-400"
+            : "border-border bg-bg/70 text-cream hover:border-border-light"
+        }`}
+      >
+        <span style={{ color: theme.accent }}>&#9654;</span>
+        <span>{dayNightCycleActive ? "CYCLE ON" : "CYCLE OFF"}</span>
       </button>
 
       {/* Audio/Radio Slot if mounted */}

@@ -79,7 +79,6 @@ const fragmentShader = /* glsl */ `
 
   void main() {
     float fogDepth = length(vViewPos);
-    if (fogDepth > uFogFar) discard;
 
     vec3 absN = abs(vNormal);
     float isRoof = step(0.5, absN.y);
@@ -183,6 +182,7 @@ interface InstancedBuildingsProps {
   holdRise?: boolean;
   liveByLogin?: Map<string, unknown>;
   cityEnergy?: number;
+  timeRef?: React.MutableRefObject<number>;
 }
 
 interface RiseState {
@@ -207,6 +207,7 @@ export default memo(function InstancedBuildings({
   holdRise,
   liveByLogin,
   cityEnergy = 1.0,
+  timeRef,
 }: InstancedBuildingsProps) {
   const meshRef = useRef<THREE.InstancedMesh>(null);
   const count = buildings.length;
@@ -429,9 +430,10 @@ export default memo(function InstancedBuildings({
     const fog = scene.fog as THREE.Fog | null;
     if (!fog) return;
 
-    // Day/Night Calculation: 1 min cycle for demo, easily changable
-    const timeCycle = (Math.sin(clock.elapsedTime * 0.05) + 1.0) / 2.0;
-    material.uniforms.uTimeOfDay.value = timeCycle;
+    const tVal = timeRef ? timeRef.current : 0.0;
+    // Map cycle progress [0, 1] to uTimeOfDay [0, 1] using cosine curve
+    const uTimeVal = (1.0 - Math.cos(tVal * 2.0 * Math.PI)) / 2.0;
+    material.uniforms.uTimeOfDay.value = uTimeVal;
 
     const lastFogColorHex = material.uniforms.uFogColor.value.getHex();
     const currentFogHex = fog.color.getHex();

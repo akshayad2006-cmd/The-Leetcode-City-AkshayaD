@@ -19,6 +19,7 @@ import WhiteRabbit from "./WhiteRabbit";
 import CelebrationEffect from "./CelebrationEffect";
 import WallpaperParallax from "./WallpaperParallax";
 import InfiniteWater from "./InfiniteWater";
+import AtmosphereCycleManager from "./AtmosphereCycleManager";
 
 // ─── Theme Definitions ───────────────────────────────────────
 
@@ -68,8 +69,7 @@ const THEMES: CityTheme[] = [
   // 0 – Midnight
   {
     sky: [
-      [0, "#000206"], [0.15, "#020814"], [0.30, "#061428"], [0.45, "#0c2040"],
-      [0.55, "#102850"], [0.65, "#0c2040"], [0.80, "#061020"], [1, "#020608"],
+      [0, "#000206"], [0.25, "#020814"], [0.5, "#0a1428"], [0.75, "#0a1428"], [1, "#0a1428"],
     ],
     fogColor: "#0a1428", fogNear: 400, fogFar: 2500,
     ambientColor: "#4060b0", ambientIntensity: 0.55,
@@ -89,9 +89,7 @@ const THEMES: CityTheme[] = [
   // 1 – Sunset
   {
     sky: [
-      [0, "#0c0614"], [0.15, "#1c0e30"], [0.28, "#3a1850"], [0.38, "#6a3060"],
-      [0.46, "#a05068"], [0.52, "#d07060"], [0.57, "#e89060"], [0.62, "#f0b070"],
-      [0.68, "#f0c888"], [0.75, "#c08060"], [0.85, "#603030"], [1, "#180c10"],
+      [0, "#0c0614"], [0.25, "#e89060"], [0.5, "#80405a"], [0.75, "#80405a"], [1, "#80405a"],
     ],
     fogColor: "#80405a", fogNear: 400, fogFar: 2500,
     ambientColor: "#e0a080", ambientIntensity: 0.7,
@@ -111,9 +109,7 @@ const THEMES: CityTheme[] = [
   // 2 – Neon
   {
     sky: [
-      [0, "#06001a"], [0.15, "#100028"], [0.30, "#200440"], [0.42, "#380650"],
-      [0.52, "#500860"], [0.60, "#380648"], [0.75, "#180230"], [0.90, "#0c0118"],
-      [1, "#06000c"],
+      [0, "#06001a"], [0.25, "#200440"], [0.5, "#1a0830"], [0.75, "#1a0830"], [1, "#1a0830"],
     ],
     fogColor: "#1a0830", fogNear: 400, fogFar: 2500,
     ambientColor: "#8040c0", ambientIntensity: 0.6,
@@ -133,9 +129,7 @@ const THEMES: CityTheme[] = [
   // 3 – Emerald
   {
     sky: [
-      [0, "#000804"], [0.15, "#001408"], [0.30, "#002810"], [0.42, "#003c1c"],
-      [0.52, "#004828"], [0.60, "#003820"], [0.75, "#002014"], [0.90, "#001008"],
-      [1, "#000604"],
+      [0, "#000804"], [0.25, "#002810"], [0.5, "#0a2014"], [0.75, "#0a2014"], [1, "#0a2014"],
     ],
     fogColor: "#0a2014", fogNear: 400, fogFar: 2500,
     ambientColor: "#40a060", ambientIntensity: 0.55,
@@ -163,49 +157,6 @@ function SceneBackground({ color }: { color: string }) {
     scene.background = new THREE.Color(color);
   }, [color, scene]);
   return null;
-}
-
-// ─── Sky Dome ────────────────────────────────────────────────
-
-function SkyDome({ stops }: { stops: [number, string][] }) {
-  const meshRef = useRef<THREE.Mesh>(null);
-  const mat = useMemo(() => {
-    const c = document.createElement("canvas");
-    c.width = 4;
-    c.height = 512;
-    const ctx = c.getContext("2d")!;
-    const g = ctx.createLinearGradient(0, 0, 0, 512);
-    for (const [stop, color] of stops) g.addColorStop(stop, color);
-    ctx.fillStyle = g;
-    ctx.fillRect(0, 0, 4, 512);
-    const tex = new THREE.CanvasTexture(c);
-    tex.colorSpace = THREE.SRGBColorSpace;
-    tex.magFilter = THREE.NearestFilter;
-    tex.minFilter = THREE.NearestFilter;
-    tex.generateMipmaps = false;
-    tex.needsUpdate = true;
-    return new THREE.MeshBasicMaterial({ map: tex, side: THREE.BackSide, fog: false, depthWrite: false });
-  }, [stops]);
-
-  // Keep sky dome centered on camera so it always surrounds the viewer
-  useFrame(({ camera }) => {
-    if (meshRef.current) {
-      meshRef.current.position.copy(camera.position);
-    }
-  });
-
-  useEffect(() => {
-    return () => {
-      mat.map?.dispose();
-      mat.dispose();
-    };
-  }, [mat]);
-
-  return (
-    <mesh ref={meshRef} material={mat} renderOrder={-1}>
-      <sphereGeometry args={[3500, 32, 48]} />
-    </mesh>
-  );
 }
 
 // ─── Paper Plane (GLB model) ─────────────────────────────────
@@ -1149,11 +1100,11 @@ function CircularCityPlatform({ radius, color }: { radius: number; color: string
       <mesh position={[0, -14, 0]}>
         <cylinderGeometry args={[platformRadius, platformRadius + 44, 28, 128]} />
         <meshStandardMaterial
-          color="#263442"
-          emissive="#101924"
-          emissiveIntensity={0.28}
-          roughness={0.92}
-          metalness={0.05}
+          color="#05070a"
+          emissive="#000000"
+          emissiveIntensity={0.0}
+          roughness={0.95}
+          metalness={0.1}
         />
       </mesh>
       {/* Platform top surface */}
@@ -1639,43 +1590,43 @@ function InstancedDecorations({ items, roadMarkingColor, sidewalkColor }: { item
     <>
       {trees.length > 0 && (
         <>
-          <instancedMesh ref={treeTrunkRef} args={[geos.treeTrunk, mats.treeTrunk, trees.length]} />
-          <instancedMesh ref={treeCanopyRef} args={[geos.treeCanopy, mats.treeCanopy, trees.length]} />
+          <instancedMesh ref={treeTrunkRef} args={[geos.treeTrunk, mats.treeTrunk, trees.length]} frustumCulled={false} />
+          <instancedMesh ref={treeCanopyRef} args={[geos.treeCanopy, mats.treeCanopy, trees.length]} frustumCulled={false} />
         </>
       )}
       {lamps.length > 0 && (
         <>
-          <instancedMesh ref={lampPoleRef} args={[geos.lampPole, mats.lampPole, lamps.length]} />
-          <instancedMesh ref={lampLightRef} args={[geos.lampLight, mats.lampLight, lamps.length]} />
+          <instancedMesh ref={lampPoleRef} args={[geos.lampPole, mats.lampPole, lamps.length]} frustumCulled={false} />
+          <instancedMesh ref={lampLightRef} args={[geos.lampLight, mats.lampLight, lamps.length]} frustumCulled={false} />
         </>
       )}
       {cars.length > 0 && (
         <>
-          <instancedMesh ref={carBodyRef} args={[geos.carBody, mats.carBody, cars.length]} />
-          <instancedMesh ref={carCabinRef} args={[geos.carCabin, mats.carCabin, cars.length]} />
+          <instancedMesh ref={carBodyRef} args={[geos.carBody, mats.carBody, cars.length]} frustumCulled={false} />
+          <instancedMesh ref={carCabinRef} args={[geos.carCabin, mats.carCabin, cars.length]} frustumCulled={false} />
         </>
       )}
       {roadMarkings.length > 0 && (
-        <instancedMesh ref={roadMarkingRef} args={[geos.roadMarking, mats.roadMarking, roadMarkings.length]} />
+        <instancedMesh ref={roadMarkingRef} args={[geos.roadMarking, mats.roadMarking, roadMarkings.length]} frustumCulled={false} />
       )}
       {benches.length > 0 && (
         <>
-          <instancedMesh ref={benchSeatRef} args={[_dBox, mats.benchWood, benches.length]} />
-          <instancedMesh ref={benchBackRef} args={[_dBox, mats.benchWood, benches.length]} />
-          <instancedMesh ref={benchLegLRef} args={[_dBox, mats.benchMetal, benches.length]} />
-          <instancedMesh ref={benchLegRRef} args={[_dBox, mats.benchMetal, benches.length]} />
+          <instancedMesh ref={benchSeatRef} args={[_dBox, mats.benchWood, benches.length]} frustumCulled={false} />
+          <instancedMesh ref={benchBackRef} args={[_dBox, mats.benchWood, benches.length]} frustumCulled={false} />
+          <instancedMesh ref={benchLegLRef} args={[_dBox, mats.benchMetal, benches.length]} frustumCulled={false} />
+          <instancedMesh ref={benchLegRRef} args={[_dBox, mats.benchMetal, benches.length]} frustumCulled={false} />
         </>
       )}
       {fountains.length > 0 && (
         <>
-          <instancedMesh ref={fountainBasinRef} args={[geos.fountainBasin, mats.fountainStone1, fountains.length]} />
-          <instancedMesh ref={fountainMidRef} args={[geos.fountainMid, mats.fountainStone2, fountains.length]} />
-          <instancedMesh ref={fountainUpperRef} args={[geos.fountainUpper, mats.fountainStone3, fountains.length]} />
-          <instancedMesh ref={fountainWaterRef} args={[geos.fountainWater, mats.fountainWater, fountains.length]} />
+          <instancedMesh ref={fountainBasinRef} args={[geos.fountainBasin, mats.fountainStone1, fountains.length]} frustumCulled={false} />
+          <instancedMesh ref={fountainMidRef} args={[geos.fountainMid, mats.fountainStone2, fountains.length]} frustumCulled={false} />
+          <instancedMesh ref={fountainUpperRef} args={[geos.fountainUpper, mats.fountainStone3, fountains.length]} frustumCulled={false} />
+          <instancedMesh ref={fountainWaterRef} args={[geos.fountainWater, mats.fountainWater, fountains.length]} frustumCulled={false} />
         </>
       )}
       {sidewalks.length > 0 && (
-        <instancedMesh ref={sidewalkRef} args={[_dPlane, mats.sidewalk, sidewalks.length]} />
+        <instancedMesh ref={sidewalkRef} args={[_dPlane, mats.sidewalk, sidewalks.length]} frustumCulled={false} />
       )}
     </>
   );
@@ -1978,6 +1929,7 @@ interface Props {
   onExitFly: (aborted?: boolean) => void;
   onCollect?: (score: number, earned: number, combo: number, collected: number, maxCombo: number) => void;
   themeIndex: number;
+  dayNightCycleActive?: boolean;
   onHud?: (speed: number, altitude: number, x: number, z: number, yaw: number) => void;
   onPause?: (paused: boolean) => void;
   focusedBuilding?: string | null;
@@ -2034,10 +1986,11 @@ function CityExposure({ cityEnergy }: { cityEnergy: number }) {
 // Plaza indices for rabbit sightings (progressively further from center)
 const RABBIT_PLAZA_INDICES = [1, 2, 4, 7, 10]; // plazas[1]=slot3, [2]=slot7, [4]=slot18, [7]=slot42, [10]=slot75
 
-export default function CityCanvas({ buildings, plazas, decorations, river, bridges, flyMode, flyVehicle, onExitFly, onCollect, themeIndex, onHud, onPause, focusedBuilding, focusedBuildingB, accentColor, onClearFocus, onBuildingClick, onFocusInfo, flyPauseSignal, flyHasOverlay, flyStartPaused, skyAds, onAdClick, onAdViewed, introMode, onIntroEnd, raidPhase, raidData, raidAttacker, raidDefender, onRaidPhaseComplete, onLandmarkClick, rabbitSighting, onRabbitCaught, rabbitCinematic, onRabbitCinematicEnd, rabbitCinematicTarget, ghostPreviewLogin, holdRise, celebrationActive, wallpaperMode, wallpaperSpeed, liveByLogin, cityEnergy }: Props) {
+export default function CityCanvas({ buildings, plazas, decorations, river, bridges, flyMode, flyVehicle, onExitFly, onCollect, themeIndex, dayNightCycleActive, onHud, onPause, focusedBuilding, focusedBuildingB, accentColor, onClearFocus, onBuildingClick, onFocusInfo, flyPauseSignal, flyHasOverlay, flyStartPaused, skyAds, onAdClick, onAdViewed, introMode, onIntroEnd, raidPhase, raidData, raidAttacker, raidDefender, onRaidPhaseComplete, onLandmarkClick, rabbitSighting, onRabbitCaught, rabbitCinematic, onRabbitCinematicEnd, rabbitCinematicTarget, ghostPreviewLogin, holdRise, celebrationActive, wallpaperMode, wallpaperSpeed, liveByLogin, cityEnergy }: Props) {
   const t = THEMES[themeIndex] ?? THEMES[0];
   const showPerf = typeof window !== "undefined" && new URLSearchParams(window.location.search).has("perf");
   const flyPosRef = useRef(new THREE.Vector3());
+  const timeRef = useRef(0.0);
 
   const cityRadius = useMemo(() => {
     let max = 200;
@@ -2100,16 +2053,13 @@ export default function CityCanvas({ buildings, plazas, decorations, river, brid
     >
       {showPerf && <Stats />}
       <CityExposure cityEnergy={cityEnergy ?? 1} />
-      <fog attach="fog" args={[t.fogColor, t.fogNear, t.fogFar]} key={`fog-${themeIndex}`} />
-      <SceneBackground color={t.fogColor} key={`bg-${themeIndex}`} />
-
-
-      <ambientLight intensity={t.ambientIntensity * 3} color={t.ambientColor} />
-      <directionalLight position={t.sunPos} intensity={t.sunIntensity * 3.5} color={t.sunColor} />
-      <directionalLight position={t.fillPos} intensity={t.fillIntensity * 3} color={t.fillColor} />
-      <hemisphereLight args={[t.hemiSky, t.hemiGround, t.hemiIntensity * 3.5]} key={`hemi-${themeIndex}`} />
-
-      <SkyDome key={`sky-${themeIndex}`} stops={t.sky} />
+      <AtmosphereCycleManager
+        theme={t}
+        themeIndex={themeIndex}
+        active={dayNightCycleActive ?? false}
+        timeRef={timeRef}
+        cityRadius={cityRadius}
+      />
 
       {introMode && <IntroFlyover onEnd={onIntroEnd ?? (() => { })} />}
 
@@ -2187,6 +2137,7 @@ export default function CityCanvas({ buildings, plazas, decorations, river, brid
         holdRise={holdRise}
         liveByLogin={liveByLogin}
         cityEnergy={cityEnergy}
+        timeRef={timeRef}
       />
 
       <InstancedDecorations items={decorations} roadMarkingColor={t.roadMarkingColor} sidewalkColor={t.sidewalkColor} />

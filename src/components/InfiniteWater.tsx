@@ -38,6 +38,9 @@ const fragmentShader = `
   uniform vec3 uWaterColor;
   uniform vec3 uWaterEmissive;
   uniform vec3 uCameraPos;
+  uniform vec3 uFogColor;
+  uniform float uFogNear;
+  uniform float uFogFar;
   varying vec3 vWorldPosition;
   varying float vHeight;
 
@@ -68,6 +71,11 @@ const fragmentShader = `
     // Fresnel edge glow
     color += vec3(0.2, 0.3, 0.5) * fresnel * 0.15;
 
+    // Fog blending for smooth horizon transition ("smog of war")
+    float depth = length(uCameraPos - vWorldPosition);
+    float fogFactor = smoothstep(uFogNear, uFogFar, depth);
+    color = mix(color, uFogColor, fogFactor);
+
     gl_FragColor = vec4(color, 1.0);
   }
 `;
@@ -82,6 +90,9 @@ export default function InfiniteWater({ waterColor, waterEmissive }: Props) {
       uWaterColor: { value: new THREE.Color(waterColor) },
       uWaterEmissive: { value: new THREE.Color(waterEmissive) },
       uCameraPos: { value: new THREE.Vector3() },
+      uFogColor: { value: new THREE.Color("#000000") },
+      uFogNear: { value: 0 },
+      uFogFar: { value: 1000 },
     }),
     []
   );
@@ -92,13 +103,20 @@ export default function InfiniteWater({ waterColor, waterEmissive }: Props) {
     uniforms.uWaterEmissive.value.set(waterEmissive);
   }, [waterColor, waterEmissive, uniforms]);
 
-  useFrame(({ clock, camera }) => {
+  useFrame(({ clock, camera, scene }) => {
     uniforms.uTime.value = clock.elapsedTime;
     uniforms.uCameraPos.value.copy(camera.position);
+
+    const fog = scene.fog as THREE.Fog | null;
+    if (fog) {
+      uniforms.uFogColor.value.copy(fog.color);
+      uniforms.uFogNear.value = fog.near;
+      uniforms.uFogFar.value = fog.far;
+    }
   });
 
   return (
-    <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -3, 0]}>
+    <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -20, 0]}>
       <planeGeometry args={[80000, 80000, 128, 128]} />
       <shaderMaterial
         ref={matRef}
