@@ -127,6 +127,16 @@ jobs:
                   assignees: assignees.map(a => a.login),
                 });
 
+                // Unlock the issue so new contributors can claim it
+                try {
+                  await github.rest.issues.unlock({
+                    owner, repo,
+                    issue_number: issue.number
+                  });
+                } catch (e) {
+                  console.log(`Could not unlock issue #${issue.number}: ${e.message}`);
+                }
+
                 // Post reopening comment
                 await github.rest.issues.createComment({
                   owner, repo,
@@ -142,6 +152,16 @@ jobs:
               if (hoursElapsed >= WARNING_HOURS && !alreadyWarned) {
                 const remainingHours = Math.max(0, Math.ceil(DEADLINE_HOURS - hoursElapsed));
                 console.log(`#${issue.number} (@${assignee}): ${hoursElapsed.toFixed(1)}h elapsed → WARNING (${remainingHours}h left)`);
+
+                // Unlock the issue so they can reply if they need more time
+                try {
+                  await github.rest.issues.unlock({
+                    owner, repo,
+                    issue_number: issue.number
+                  });
+                } catch (e) {
+                  console.log(`Could not unlock issue #${issue.number}: ${e.message}`);
+                }
 
                 await github.rest.issues.createComment({
                   owner, repo,
