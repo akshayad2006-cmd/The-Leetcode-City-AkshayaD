@@ -24,33 +24,38 @@ export async function GET(request: Request) {
     .from("developer_customizations")
     .select("item_id, config")
     .eq("developer_id", developerId)
-    .in("item_id", ["custom_color", "billboard", "led_banner"]);
+    .in("item_id", ["custom_color", "billboard", "led_banner", "selected_title"]);
 
   let customColor: string | null = null;
   let billboardImages: string[] = [];
   let ledBannerText: string | null = null;
+  let selectedTitle: string | null = null;
 
   for (const row of data ?? []) {
-    const config = row.config as Record<string, unknown>;
-    if (row.item_id === "custom_color" && typeof config?.color === "string") {
-      customColor = config.color;
-    }
-    if (row.item_id === "billboard") {
-      if (Array.isArray(config?.images)) {
-        billboardImages = config.images as string[];
-      } else if (typeof config?.image_url === "string") {
-        billboardImages = [config.image_url];
-      }
-    }
-    if (row.item_id === "led_banner" && typeof config?.text === "string") {
-      ledBannerText = config.text;
-    }
+     const config = row.config as Record<string, unknown>;
+     if (row.item_id === "custom_color" && typeof config?.color === "string") {
+       customColor = config.color;
+     }
+     if (row.item_id === "billboard") {
+       if (Array.isArray(config?.images)) {
+         billboardImages = config.images as string[];
+       } else if (typeof config?.image_url === "string") {
+         billboardImages = [config.image_url];
+       }
+     }
+     if (row.item_id === "led_banner" && typeof config?.text === "string") {
+       ledBannerText = config.text;
+     }
+     if (row.item_id === "selected_title" && typeof config?.slug === "string") {
+       selectedTitle = config.slug;
+     }
   }
 
   return NextResponse.json({
     custom_color: customColor,
     billboard_images: billboardImages,
     led_banner_text: ledBannerText,
+    selected_title: selectedTitle,
   });
 }
 
@@ -87,34 +92,87 @@ export async function POST(request: Request) {
   }
 
   // Parse body
-  let body: { item_id: string; color?: string | null; text?: string | null };
+  let body: { item_id: string; color?: string | null; text?: string | null; slug?: string | null };
   try {
     body = await request.json();
-  } catch (err) { console.warn("[app/api/customizations/route.ts] error:", err); return NextResponse.json({ error: "Invalid body" }, { status: 400 });
-   }
-  const { item_id, color, text } = body;
+  } catch (err) {
+    console.warn("[app/api/customizations/route.ts] error:", err);
+    return NextResponse.json({ error: "Invalid body" }, { status: 400 });
+  }
+  const { item_id, color, text, slug } = body;
 
-  if (item_id !== "custom_color" && item_id !== "led_banner") {
+  if (item_id !== "custom_color" && item_id !== "led_banner" && item_id !== "selected_title") {
     return NextResponse.json(
-      { error: "Use /api/customizations/upload for billboard" },
+      { error: "Invalid item_id" },
       { status: 400 }
     );
   }
 
-  // Validate ownership
-  const { data: purchase } = await sb
-    .from("purchases")
-    .select("id")
-    .eq("developer_id", dev.id)
-    .eq("item_id", item_id)
-    .eq("status", "completed")
-    .maybeSingle();
+  // Validate ownership (except for selected_title config which is a free menu settings)
+  if (item_id !== "selected_title") {
+    const { data: purchase } = await sb
+      .from("purchases")
+      .select("id")
+      .eq("developer_id", dev.id)
+      .eq("item_id", item_id)
+      .eq("status", "completed")
+      .maybeSingle();
 
-  if (!purchase) {
-    return NextResponse.json(
-      { error: "You don't own this item" },
-      { status: 403 }
+    if (!purchase) {
+      return NextResponse.json(
+        { error: "You don't own this item" },
+        { status: 403 }
+      );
+    }
+  }
+
+  if (item_id === "selected_title") {
+    if (!slug || slug === "auto") {
+      const { error: deleteError } = await sb.from("developer_customizations")
+        .delete().eq("developer_id", dev.id).eq("item_id", "selected_title");
+      if (deleteError) return NextResponse.json({ error: "Failed to remove customization" }, { status: 500 });
+      return NextResponse.json({ success: true, slug: null });
+    }
+
+    const isDeveloper = ["ishant_27", "ixotic", "ixotic27"].includes(githubLogin.toLowerCase());
+    const isDevTitle = ["title_creator", "title_lead_dev", "title_sys_op"].includes(slug);
+
+    if (isDevTitle && !isDeveloper) {
+      return NextResponse.json({ error: "This title is reserved for LeetCode City developers" }, { status: 403 });
+    }
+
+    // Only check arena inventory for standard badges, not developer titles
+    if (!isDevTitle) {
+      // Resolve item UUID from slug
+      const { data: itemData } = await sb
+        .from("arena_items")
+        .select("id")
+        .eq("slug", slug)
+        .single();
+
+      if (!itemData) {
+        return NextResponse.json({ error: "Invalid title slug" }, { status: 400 });
+      }
+
+      // Verify they own the item in arena_inventory
+      const { data: ownsItem } = await sb
+        .from("arena_inventory")
+        .select("id")
+        .eq("user_id", dev.id)
+        .eq("item_id", itemData.id)
+        .maybeSingle();
+
+      if (!ownsItem) {
+        return NextResponse.json({ error: "You must unlock this title badge in the Arena first" }, { status: 403 });
+      }
+    }
+
+    const { error: upsertError } = await sb.from("developer_customizations").upsert(
+      { developer_id: dev.id, item_id: "selected_title", config: { slug } },
+      { onConflict: "developer_id,item_id" }
     );
+    if (upsertError) return NextResponse.json({ error: "Failed to save customization" }, { status: 500 });
+    return NextResponse.json({ success: true, slug });
   }
 
   if (item_id === "custom_color") {
