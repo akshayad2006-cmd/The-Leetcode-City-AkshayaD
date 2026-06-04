@@ -2,14 +2,14 @@ name: LC City Miscellaneous Crons
 
 on:
   schedule:
-    - cron: "0 20 * * *"   # streak-reminder (Daily at 20:00 UTC)
-    - cron: "0 10 * * 1"   # weekly-digest (Weekly on Mondays at 10:00 UTC)
-    - cron: "0 10 1 * *"   # monthly-digest (Monthly on the 1st at 10:00 UTC)
-    - cron: "0 14 * * *"   # re-engagement (Daily at 14:00 UTC)
-    - cron: "0 2 * * *"    # city-snapshot (Daily at 02:00 UTC)
-    - cron: "0 3 * * *"    # cleanup-sessions (Daily at 03:00 UTC)
-    - cron: "0 6 * * *"    # lc-refresh (Daily at 06:00 UTC)
-    - cron: "0 0 28 * *"   # monthly-sync (Monthly on the 28th at 00:00 UTC)
+    - cron: "0 20 * * *" # streak-reminder (Daily at 20:00 UTC)
+    - cron: "0 10 * * 1" # weekly-digest (Weekly on Mondays at 10:00 UTC)
+    - cron: "0 10 1 * *" # monthly-digest (Monthly on the 1st at 10:00 UTC)
+    - cron: "0 14 * * *" # re-engagement (Daily at 14:00 UTC)
+    - cron: "0 2 * * *" # city-snapshot (Daily at 02:00 UTC)
+    - cron: "0 3 * * *" # cleanup-sessions (Daily at 03:00 UTC)
+    - cron: "0 6 * * *" # lc-refresh (Daily at 06:00 UTC)
+    - cron: "0 0 28 * *" # monthly-sync (Monthly on the 28th at 00:00 UTC)
   workflow_dispatch:
     inputs:
       job:
@@ -76,6 +76,6 @@ jobs:
               *) echo "Unknown cron schedule: $cron"; exit 1 ;;
             esac
           fi
-          
+
           echo "🚀 Executing cron job: $JOB"
           npx tsx scripts/run-cron.ts "$JOB"
