@@ -94,15 +94,20 @@ export async function POST(request: Request) {
     // silently dropped. No application-level SELECT is needed.
     await admin
       .from("purchases")
-      .insert({
-        developer_id: dev.id,
-        item_id: "white_rabbit",
-        provider: "system",
-        amount_cents: 0,
-        currency: "usd",
-        status: "completed",
-      })
-      .onConflict({ ignoreDuplicates: true });   // maps to ON CONFLICT DO NOTHING
+      .upsert(
+        {
+          developer_id: dev.id,
+          item_id: "white_rabbit",
+          provider: "system",
+          amount_cents: 0,
+          currency: "usd",
+          status: "completed",
+        },
+        {
+          onConflict: "developer_id,item_id",
+          ignoreDuplicates: true,
+        }
+      );   // maps to ON CONFLICT DO NOTHING
 
     return NextResponse.json({ progress: 5, completed: true });
   }
