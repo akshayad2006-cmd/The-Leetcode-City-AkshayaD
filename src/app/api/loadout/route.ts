@@ -3,6 +3,7 @@ import { createServerSupabase } from "@/lib/supabase-server";
 import { getSupabaseAdmin } from "@/lib/supabase";
 import { ZONE_ITEMS } from "@/lib/zones";
 import { parseDeveloperId } from "./developer-id";
+import { getOwnedItems } from "@/lib/items";
 
 export const dynamic = "force-dynamic";
 
@@ -71,14 +72,9 @@ export async function POST(request: Request) {
     faces?: string | null;
   };
 
-  // Fetch owned items
-  const { data: purchases } = await admin
-    .from("purchases")
-    .select("item_id")
-    .eq("developer_id", dev.id)
-    .eq("status", "completed");
-
-  const ownedSet = new Set((purchases ?? []).map((p) => p.item_id));
+  // Fetch owned items (direct purchases + received gifts)
+  const ownedItems = await getOwnedItems(dev.id);
+  const ownedSet = new Set(ownedItems);
 
   // Validate each equipped item is owned and belongs to the correct zone
   const config: Record<string, string | null> = { crown: null, roof: null, aura: null, faces: null };
