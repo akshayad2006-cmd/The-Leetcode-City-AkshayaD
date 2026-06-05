@@ -32,7 +32,7 @@ interface FlyScoreLeaderboard {
   flight_ms: number;
   created_at: string;
   developer_id: number;
-  developers: { github_login: string; avatar_url: string }[] | null;
+  developers: any;
 }
 
 export async function POST(request: Request) {
@@ -157,13 +157,8 @@ export async function POST(request: Request) {
 
   const { data: allDevs } = await admin.from("fly_scores").select("developer_id").eq("seed", seed);
   const total = new Set((allDevs ?? []).map((r: FlyScoreDev) => r.developer_id)).size;
-  if (!row) {
-    return NextResponse.json(
-      { error: "Unable to save fly score" },
-      { status: 500 }
-    );
-  }
-  return NextResponse.json({ id: row.id, score, rank_today, total });
+
+  return NextResponse.json({ id: row?.id, score, rank_today, total });
 }
 
 export async function GET(request: Request) {
@@ -198,18 +193,17 @@ export async function GET(request: Request) {
   });
 
   const leaderboard = unique.slice(0, 20).map((row: FlyScoreLeaderboard) => {
-  const developer = row.developers?.[0];
-
-  return {
-    score: row.score,
-    collected: row.collected,
-    max_combo: row.max_combo,
-    flight_ms: row.flight_ms,
-    created_at: row.created_at,
-    github_login: developer?.github_login,
-    avatar_url: developer?.avatar_url,
-  };
-});
+    const dev = Array.isArray(row.developers) ? row.developers[0] : row.developers;
+    return {
+      score: row.score,
+      collected: row.collected,
+      max_combo: row.max_combo,
+      flight_ms: row.flight_ms,
+      created_at: row.created_at,
+      github_login: dev?.github_login,
+      avatar_url: dev?.avatar_url,
+    };
+  });
 
   const total = new Set((devIds ?? []).map((r: FlyScoreDev) => r.developer_id)).size;
 
