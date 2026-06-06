@@ -95,6 +95,7 @@ Run `npm run lint` before submitting.
 1. Fork the repo
 2. Create a branch from `main` and name it with the issue number and name (e.g. `git checkout -b 12-issue-name`).
 > **🛑 STOP:** Do NOT commit your changes to your fork's `main` branch. You MUST create a new branch. Pull Requests submitted from a `main` or `master` branch will be automatically rejected by our bots.
+> **🔄 IMPORTANT:** This project is currently in a very **active development stage**. While you are working, you should regularly pull the latest changes from the upstream `main` branch (e.g. `git pull origin main --rebase`). If you do not stay up to date, your PR will likely get merge conflicts or overwrite other fixes that were just merged!
 3. Make your changes
 4. Run `npm run lint` and fix any issues
 5. Commit with a clear message (e.g. `feat: add rain weather effect`)
